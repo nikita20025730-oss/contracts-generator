@@ -1,23 +1,24 @@
 // generate_contract_pipeline.js
-// Полный конвейер: данные формы → рендер шаблона → сохранение на Диск →
-// запись номера/даты обратно в смету.
+// УПРОЩЁННАЯ ВЕРСИЯ: без автозагрузки на Google Диск (это требовало бы
+// либо Google Workspace с Общими дисками, либо OAuth от личного аккаунта —
+// оба варианта оказались избыточно сложны для личного Gmail на старте).
 //
-// Это ядро будущей Netlify Function. Сама функция (netlify/functions/
-// generate-contract.js) будет тонкой обёрткой вокруг generateContract()
-// ниже — принимает HTTP-запрос, вызывает эту функцию, возвращает ответ.
+// Вместо этого функция генерирует .docx и возвращает его как файл на
+// скачивание — пользователь сам сохраняет его в нужную папку на Диске
+// (обычное перетаскивание файла, как при скачивании чего угодно из сети).
+//
+// Google Таблицы (чтение сметы + запись номера/даты договора обратно)
+// продолжают работать через Service Account без изменений — там
+// ограничение по квоте не действует, оно было только на создание новых
+// файлов на Диске.
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const PizZip = require("pizzip");
 const Docxtemplater = require("docxtemplater");
 
-const { uploadContractFile } = require("./drive_uploader");
 const { writeContractBackToSheet } = require("./sheets_writer");
 
-// Карта: (тип договора, тип контрагента) → имя файла шаблона.
-// Пути соответствуют финальным версиям из /mnt/user-data/outputs.
-// В реальном деплое шаблоны кладутся в templates/ рядом с функцией.
 const TEMPLATE_MAP = {
   "services_200|ip": "Шаблон_РОСМОЛ_услуги_ИП_v2_с_циклом.docx",
   "services_200|ip_ads": "Шаблон_РОСМОЛ_услуги_ИП_реклама_v2_с_циклом.docx",
@@ -25,13 +26,6 @@ const TEMPLATE_MAP = {
   "supply_300|ip": "Шаблон_РОСМОЛ_поставка_ИП_v2_с_циклом.docx",
   "supply_300|ooo": "Шаблон_РОСМОЛ_поставка_ООО_v2_с_циклом.docx",
   "rental_400|ip": "Шаблон_РОСМОЛ_аренда_ИП_v2_с_циклом.docx",
-};
-
-// Карта грантов → отображаемое имя папки на Диске (можно расширять).
-const GRANT_FOLDER_NAMES = {
-  vkmp: "ВКМП",
-  rddm_spbguptd: "РДДМ-СПбГУПТД",
-  rddm_npt: "РДДМ-НПТ",
 };
 
 function resolveTemplatePath(templatesDir, contractType, contractorVariant) {
@@ -50,11 +44,6 @@ function resolveTemplatePath(templatesDir, contractType, contractorVariant) {
   return fullPath;
 }
 
-/**
- * Рендерит шаблон с данными и возвращает Buffer готового .docx.
- * Бросает понятную ошибку, если в данных не хватает переменных,
- * которые требует шаблон (docxtemplater перечисляет их все разом).
- */
 function renderTemplate(templatePath, data) {
   const content = fs.readFileSync(templatePath, "binary");
   const zip = new PizZip(content);
@@ -74,60 +63,24 @@ function renderTemplate(templatePath, data) {
 }
 
 /**
- * Полный сценарий генерации одного договора.
+ * Генерирует договор и возвращает готовый Buffer файла.
+ * Загрузка на Диск больше не выполняется здесь - см. комментарий в шапке файла.
  *
  * @param {object} params
- * @param {string} params.templatesDir - папка с .docx-шаблонами на сервере
- * @param {string} params.contractType - "services_200" | "supply_300" | "rental_400"
- * @param {string} params.contractorVariant - "ip" | "ooo" | "samozanyaty" | "ip_ads"
- * @param {object} params.data - все переменные для docxtemplater (см. contract_schema_draft.json)
- * @param {string} params.fileName - имя итогового файла, напр. "Договор_РОСМОЛ-08-2026.docx"
- * @param {string} params.grantId - "vkmp" | "rddm_spbguptd" | "rddm_npt"
+ * @param {string} params.templatesDir
+ * @param {string} params.contractType
+ * @param {string} params.contractorVariant
+ * @param {object} params.data
  * @param {object} [params.sheetsWriteBack] - опционально: { spreadsheetId, sheetName, rowNumber }
- *   если передано - после генерации номер и дата договора пишутся обратно в смету
- * @param {boolean} [params.uploadToDrive=true] - если false, файл только генерируется локально
- * @param {string} [params.rootFolderId] - ID корневой папки на Диске (обязателен, если uploadToDrive=true)
  */
 async function generateContract(params) {
-  const {
-    templatesDir,
-    contractType,
-    contractorVariant,
-    data,
-    fileName,
-    grantId,
-    sheetsWriteBack,
-    uploadToDrive = true,
-    rootFolderId,
-  } = params;
+  const { templatesDir, contractType, contractorVariant, data, sheetsWriteBack } = params;
 
-  // 1. Рендер
   const templatePath = resolveTemplatePath(templatesDir, contractType, contractorVariant);
   const buffer = renderTemplate(templatePath, data);
 
-  // 2. Сохраняем во временный файл (нужно для стрима в Google Drive API)
-  const tmpPath = path.join(os.tmpdir(), fileName);
-  fs.writeFileSync(tmpPath, buffer);
+  const result = { buffer, sheetsWriteBack: null };
 
-  const result = { fileName, localPath: tmpPath, driveUpload: null, sheetsWriteBack: null };
-
-  // 3. Загрузка на Диск
-  if (uploadToDrive) {
-    if (!rootFolderId) {
-      throw new Error("uploadToDrive=true, но rootFolderId не передан.");
-    }
-    const grantFolderName = GRANT_FOLDER_NAMES[grantId] || grantId;
-    const uploadRes = await uploadContractFile({
-      localFilePath: tmpPath,
-      fileName,
-      rootFolderId,
-      grantName: grantFolderName,
-      docTypeName: "Договоры",
-    });
-    result.driveUpload = uploadRes;
-  }
-
-  // 4. Запись номера/даты обратно в смету
   if (sheetsWriteBack) {
     const wbRes = await writeContractBackToSheet({
       spreadsheetId: sheetsWriteBack.spreadsheetId,
@@ -138,13 +91,6 @@ async function generateContract(params) {
       headerMapOverride: sheetsWriteBack.headerMapOverride,
     });
     result.sheetsWriteBack = wbRes;
-  }
-
-  // 5. Локальный временный файл больше не нужен после успешной загрузки
-  //    (оставляем на диске, только если upload отключён - для локальной отладки)
-  if (uploadToDrive) {
-    fs.unlinkSync(tmpPath);
-    result.localPath = null;
   }
 
   return result;
