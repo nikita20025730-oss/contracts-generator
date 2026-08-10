@@ -1,0 +1,10 @@
+{
+  "name": "contracts-generator",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "docxtemplater": "^3.69.3",
+    "pizzip": "^3.2.0",
+    "googleapis": "^174.0.1"
+  }
+}
