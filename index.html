@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Для выгрузки заявки на казначейское обеспечение в Word прямо в браузере -->
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.2.0/dist/pizzip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.69.3/build/docxtemplater.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: "Montserrat", -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: #1a1a1a; background: #fafafa; display: flex; min-height: 100vh; }
@@ -835,72 +838,261 @@ async function handleSaveTracking(idx) {
 // СТРАНИЦА «ПЛАНИРОВАНИЕ РАСХОДОВ»
 // ============================================================
 const MONTH_NAMES = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+const MONTH_NAMES_GENITIVE = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+const KVR_CODES = ["613", "623", "632", "812"];
+// Код КВР по умолчанию для каждой субсидии - в изученных образцах
+// казначейского обеспечения СПбГУПТД показывал сумму в строке 613,
+// НПТ - в строке 812. Можно поменять вручную на любой из 4 кодов.
+const KVR_DEFAULTS = { rddm_spbguptd: "613", rddm_npt: "812" };
 
 function loadPlanning() {
   try {
     const raw = window.localStorage.getItem("planning");
     if (raw) return JSON.parse(raw);
   } catch (e) {}
-  return {}; // { [subsidyId]: { [year]: { months: [12 чисел] } } }
+  return {}; // { [subsidyId]: { [projectId]: { [year]: { months: [{amount,day,kvr}×12] } } } }
 }
 function savePlanning(data) { window.localStorage.setItem("planning", JSON.stringify(data)); planningData = data; }
 let planningData = loadPlanning();
 
 let planningSelectedSubsidyId = subsidies[0] ? subsidies[0].id : null;
+let planningSelectedProjectId = null;
 let planningSelectedYear = new Date().getFullYear();
 
-function getPlanMonths(subsidyId, year) {
-  const bySubsidy = planningData[subsidyId] || {};
-  const byYear = bySubsidy[year] || { months: Array(12).fill(0) };
-  return byYear.months;
+function emptyPlanMonth(subsidyId) {
+  return { amount: 0, day: "", kvr: KVR_DEFAULTS[subsidyId] || KVR_CODES[0] };
 }
-function setPlanMonth(subsidyId, year, monthIdx, value) {
+function getPlanMonths(subsidyId, projectId, year) {
+  const byProject = ((planningData[subsidyId] || {})[projectId] || {});
+  const byYear = byProject[year];
+  if (byYear && byYear.months) return byYear.months;
+  return Array.from({ length: 12 }, () => emptyPlanMonth(subsidyId));
+}
+function setPlanMonths(subsidyId, projectId, year, months) {
   if (!planningData[subsidyId]) planningData[subsidyId] = {};
-  if (!planningData[subsidyId][year]) planningData[subsidyId][year] = { months: Array(12).fill(0) };
-  planningData[subsidyId][year].months[monthIdx] = value;
+  if (!planningData[subsidyId][projectId]) planningData[subsidyId][projectId] = {};
+  planningData[subsidyId][projectId][year] = { months };
   savePlanning(planningData);
 }
 
 function renderPlanningPage() {
   const subsidyOptions = subsidies.map(s => `<option value="${s.id}" ${s.id===planningSelectedSubsidyId?'selected':''}>${s.name}</option>`).join("");
-  const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedYear);
-  const total = months.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+  const subsidy = findSubsidy(planningSelectedSubsidyId);
+  if (subsidy && !planningSelectedProjectId && subsidy.projects[0]) planningSelectedProjectId = subsidy.projects[0].id;
+  const projectOptions = subsidy ? subsidy.projects.map(p => `<option value="${p.id}" ${p.id===planningSelectedProjectId?'selected':''}>${p.name}</option>`).join("") : "";
 
-  const monthCells = MONTH_NAMES.map((name, i) => `
+  const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
+  const total = months.reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
+  const isRddm = planningSelectedSubsidyId === "rddm_spbguptd" || planningSelectedSubsidyId === "rddm_npt";
+
+  const monthCells = MONTH_NAMES.map((name, i) => {
+    const m = months[i] || emptyPlanMonth(planningSelectedSubsidyId);
+    return `
     <div class="month-cell">
       <label>${name}</label>
-      <input type="number" data-plan-month="${i}" value="${months[i] || ''}" placeholder="0">
-    </div>
-  `).join("");
+      <input type="number" data-plan-field="${i}:amount" value="${m.amount || ''}" placeholder="Сумма, руб.">
+      <label style="margin-top:8px">Дата оплаты</label>
+      <input type="number" min="1" max="31" data-plan-field="${i}:day" value="${m.day || ''}" placeholder="Число месяца">
+      <label style="margin-top:8px">КВР</label>
+      <select data-plan-field="${i}:kvr">${KVR_CODES.map(k => `<option value="${k}" ${k===m.kvr?'selected':''}>${k}</option>`).join("")}</select>
+    </div>`;
+  }).join("");
+
+  const monthOptions = MONTH_NAMES.map((name, i) => `<option value="${i}" ${i===new Date().getMonth()?'selected':''}>${name}</option>`).join("");
+  const exportSection = isRddm ? `
+    <div style="margin-top:20px">
+      <label>Месяц для заявки</label>
+      <select id="exportMonthSelect" style="max-width:220px">${monthOptions}</select>
+      <div style="margin-top:12px">
+        <button class="btn btn-primary" id="exportKaznBtn">Скачать заявку и кассовый план (Word)</button>
+      </div>
+      <div id="exportKaznStatus" style="margin-top:8px;font-size:13px"></div>
+    </div>` : `<div class="hint" style="margin-top:16px">Выгрузка заявки на казначейское обеспечение доступна только для субсидий РДДМ.</div>`;
 
   return `
-  <div class="card">
+  <div class="card card-wide">
     <h2>Планирование расходов</h2>
     <div class="row2">
       <div><label>Субсидия</label><select id="planningSubsidySelect">${subsidyOptions}</select></div>
-      <div><label>Год</label><input type="number" id="planningYearInput" value="${planningSelectedYear}"></div>
+      <div><label>Проект</label><select id="planningProjectSelect">${projectOptions || '<option>Нет проектов</option>'}</select></div>
     </div>
-    <h3>Кассовый план по месяцам, руб.</h3>
+    <div style="max-width:220px"><label>Год</label><input type="number" id="planningYearInput" value="${planningSelectedYear}"></div>
+    <h3>Кассовый план по месяцам</h3>
     <div class="month-grid">${monthCells}</div>
     <div style="margin-top:16px;font-size:15px;font-weight:600">Итого за год: ${formatRuNumber(total)} руб.</div>
-    <div class="hint" style="margin-top:10px">Данные хранятся в этом браузере. Экспорт кассового плана в отдельный файл (Excel/Word) по выбранной форме — следующий шаг, пока не реализован.</div>
+    ${exportSection}
   </div>`;
 }
 
 function attachPlanningHandlers() {
-  document.getElementById("planningSubsidySelect").onchange = (e) => { planningSelectedSubsidyId = e.target.value; renderApp(); };
+  document.getElementById("planningSubsidySelect").onchange = (e) => { planningSelectedSubsidyId = e.target.value; planningSelectedProjectId = null; renderApp(); };
+  const projSel = document.getElementById("planningProjectSelect");
+  if (projSel) projSel.onchange = (e) => { planningSelectedProjectId = e.target.value; renderApp(); };
   document.getElementById("planningYearInput").onchange = (e) => { planningSelectedYear = parseInt(e.target.value) || new Date().getFullYear(); renderApp(); };
-  document.querySelectorAll("[data-plan-month]").forEach(inp => {
+
+  document.querySelectorAll("[data-plan-field]").forEach(inp => {
     inp.oninput = () => {
-      const i = parseInt(inp.dataset.planMonth);
-      setPlanMonth(planningSelectedSubsidyId, planningSelectedYear, i, parseFloat(inp.value) || 0);
-      const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedYear);
-      const total = months.reduce((a, b) => a + (parseFloat(b) || 0), 0);
-      document.querySelector('.card h2').nextElementSibling; // no-op, keep structure simple
-      const totalEl = [...document.querySelectorAll('.card div')].find(d => d.textContent.includes('Итого за год'));
-      if (totalEl) totalEl.textContent = `Итого за год: ${formatRuNumber(total)} руб.`;
+      const [monthIdxStr, field] = inp.dataset.planField.split(":");
+      const monthIdx = parseInt(monthIdxStr);
+      const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
+      const updated = months.map((m, i) => i === monthIdx ? { ...m, [field]: field === "amount" ? (parseFloat(inp.value) || 0) : inp.value } : m);
+      setPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, updated);
+      if (field === "amount") {
+        const total = updated.reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
+        const totalEl = [...document.querySelectorAll('.card div')].find(d => d.textContent.includes('Итого за год'));
+        if (totalEl) totalEl.textContent = `Итого за год: ${formatRuNumber(total)} руб.`;
+      }
     };
   });
+
+  const exportBtn = document.getElementById("exportKaznBtn");
+  if (exportBtn) exportBtn.onclick = handleExportCashPlan;
+}
+
+// Шаблон для каждой субсидии РДДМ (файлы должны лежать в /templates/ на
+// сайте вместе с шаблонами договоров).
+const KAZNA_TEMPLATE_MAP = {
+  rddm_spbguptd: "Шаблон_Заявка_КВР_СПбГУПТД.docx",
+  rddm_npt: "Шаблон_Заявка_КВР_НПТ.docx",
+};
+
+// ============================================================
+// ЧИСЛО ПРОПИСЬЮ (перенесено из google_integration/number_to_words_ru.js,
+// та же проверенная логика - нужна и здесь, поскольку выгрузка заявки на
+// казначейское обеспечение генерируется прямо в браузере, без обращения
+// к серверу).
+// ============================================================
+const RU_ONES = {
+  m: ["", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"],
+  f: ["", "одна", "две", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"],
+};
+const RU_TEENS = ["десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать", "шестнадцать", "семнадцать", "восемнадцать", "девятнадцать"];
+const RU_TENS = ["", "", "двадцать", "тридцать", "сорок", "пятьдесят", "шестьдесят", "семьдесят", "восемьдесят", "девяносто"];
+const RU_HUNDREDS = ["", "сто", "двести", "триста", "четыреста", "пятьсот", "шестьсот", "семьсот", "восемьсот", "девятьсот"];
+const RU_SCALES = [
+  { forms: ["рубль", "рубля", "рублей"], gender: "m" },
+  { forms: ["тысяча", "тысячи", "тысяч"], gender: "f" },
+  { forms: ["миллион", "миллиона", "миллионов"], gender: "m" },
+  { forms: ["миллиард", "миллиарда", "миллиардов"], gender: "m" },
+];
+function ruPluralize(n, forms) {
+  const mod100 = n % 100, mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return forms[2];
+  if (mod10 === 1) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4) return forms[1];
+  return forms[2];
+}
+function ruThreeDigitToWords(n, gender) {
+  const words = [];
+  const hundreds = Math.floor(n / 100);
+  const remainder = n % 100;
+  if (hundreds) words.push(RU_HUNDREDS[hundreds]);
+  if (remainder >= 10 && remainder < 20) {
+    words.push(RU_TEENS[remainder - 10]);
+  } else {
+    const tens = Math.floor(remainder / 10);
+    const ones = remainder % 10;
+    if (tens) words.push(RU_TENS[tens]);
+    if (ones) words.push(RU_ONES[gender][ones]);
+  }
+  return words;
+}
+function amountToWordsRu(amount) {
+  const n = typeof amount === "string" ? parseInt(amount.replace(/[^\d]/g, ""), 10) : Math.floor(amount);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`amountToWordsRu: некорректное значение "${amount}"`);
+  if (n === 0) return "Ноль";
+  const groups = [];
+  let remaining = n;
+  while (remaining > 0) { groups.push(remaining % 1000); remaining = Math.floor(remaining / 1000); }
+  const parts = [];
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const group = groups[i];
+    if (group === 0) continue;
+    const scale = RU_SCALES[i];
+    if (!scale) throw new Error(`amountToWordsRu: сумма слишком велика`);
+    parts.push(...ruThreeDigitToWords(group, scale.gender));
+    if (i > 0) parts.push(ruPluralize(group, scale.forms));
+  }
+  const result = parts.join(" ");
+  return result.charAt(0).toUpperCase() + result.slice(1);
+}
+
+function parseDateToRuParts(dateStr) {
+  // "19.05.2026" -> { day: "19", monthGenitive: "мая", year: "2026" }
+  const [day, month, year] = dateStr.split(".");
+  const idx = parseInt(month, 10) - 1;
+  return { day: String(parseInt(day, 10)), monthGenitive: MONTH_NAMES_GENITIVE[idx] || "", year };
+}
+
+async function handleExportCashPlan() {
+  const statusEl = document.getElementById("exportKaznStatus");
+  const monthIdx = parseInt(document.getElementById("exportMonthSelect").value);
+  const templateFile = KAZNA_TEMPLATE_MAP[planningSelectedSubsidyId];
+
+  if (!templateFile) { statusEl.textContent = "❌ Для этой субсидии нет шаблона заявки."; return; }
+  if (typeof window.docxtemplater === "undefined" || typeof window.PizZip === "undefined") {
+    statusEl.textContent = "❌ Не удалось загрузить библиотеку для создания Word-файла (проверьте интернет-соединение и обновите страницу).";
+    return;
+  }
+
+  const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
+  const monthData = months[monthIdx];
+  if (!monthData || !monthData.amount || !monthData.day) {
+    statusEl.textContent = "⚠️ Для выбранного месяца не заполнена сумма или дата оплаты.";
+    return;
+  }
+
+  const grant = GRANTS[planningSelectedSubsidyId];
+  const dateParts = parseDateToRuParts(grant.grant_agreement_date);
+
+  const data = {
+    grant_agreement_number: grant.grant_agreement_number,
+    grant_agreement_day: dateParts.day,
+    grant_agreement_month_genitive: dateParts.monthGenitive,
+    grant_agreement_year: dateParts.year,
+    plan_month_name: MONTH_NAMES[monthIdx],
+    plan_year: String(planningSelectedYear),
+    plan_amount_numeric: formatRuNumber(monthData.amount),
+    plan_amount_words: amountToWordsRu(Math.floor(monthData.amount)),
+  };
+  // Заполняем все 132 ячейки таблицы (4 кода КВР × 31 день + Итого) -
+  // пустыми по умолчанию, кроме выбранного дня/кода за этот месяц.
+  for (const kvr of ["613", "623", "632", "812"]) {
+    for (let d = 1; d <= 31; d++) data[`kvr${kvr}_day${d}`] = "";
+    data[`kvr${kvr}_total`] = "";
+  }
+  const day = parseInt(monthData.day);
+  data[`kvr${monthData.kvr}_day${day}`] = formatRuNumber(monthData.amount);
+  data[`kvr${monthData.kvr}_total`] = formatRuNumber(monthData.amount);
+
+  statusEl.textContent = "Готовлю файл...";
+  try {
+    const res = await fetch(`${window.location.origin}/templates/${templateFile}`);
+    if (!res.ok) throw new Error(`Шаблон не найден по адресу /templates/${templateFile} (код ${res.status})`);
+    const arrayBuffer = await res.arrayBuffer();
+
+    const zip = new window.PizZip(arrayBuffer);
+    const doc = new window.docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      nullGetter: () => "",
+    });
+    doc.render(data);
+
+    const blob = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Заявка_КВР_${planningSelectedSubsidyId}_${MONTH_NAMES[monthIdx]}_${planningSelectedYear}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    statusEl.textContent = "✅ Файл скачан.";
+  } catch (err) {
+    statusEl.textContent = "❌ " + err.message;
+  }
 }
 
 function renderApp() {
