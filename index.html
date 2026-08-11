@@ -640,6 +640,32 @@ function isCommentColumn(colName) {
   return /коммент/i.test(colName);
 }
 
+function isStatusColumn(colName) {
+  return /статус/i.test(colName);
+}
+
+// Цвета статусов подобраны под типичную цветовую разметку в Google
+// Таблицах для колонки "Статус договора". При необходимости можно
+// расширить список — для неизвестных статусов используется серый.
+const STATUS_COLORS = [
+  { match: /подписан/i, bg: "#d1fae5", color: "#047857" },
+  { match: /не\s*подписан|ожида/i, bg: "#fef3c7", color: "#92400e" },
+  { match: /расторгн|отменен|отменён/i, bg: "#fee2e2", color: "#b91c1c" },
+  { match: /подготовлен|в работе|на согласовании/i, bg: "#dbeafe", color: "#1e40af" },
+  { match: /не начат/i, bg: "#f3f4f6", color: "#6b7280" },
+];
+function getStatusColor(value) {
+  const found = STATUS_COLORS.find((s) => s.match.test(value));
+  return found || { bg: "#f3f4f6", color: "#374151" };
+}
+
+// Колонки, которые считаются "полями учёта" (номера/даты договоров, актов,
+// платёжек) — если в них уже есть значение, ячейка подсвечивается зелёным,
+// чтобы сразу было видно, что по этой позиции уже что-то оформлено.
+function isTrackingColumn(colName) {
+  return /договор|счёт|счет|упд|акт|платежн/i.test(colName) && !isStatusColumn(colName);
+}
+
 function renderBudgetTable() {
   if (smetaState.loadedItems === null) return `<div class="hint" style="margin-top:12px">Нажмите «Загрузить из Google Таблицы», чтобы увидеть строки сметы.</div>`;
   if (smetaState.loadedItems.length === 0) return `<div class="hint" style="margin-top:12px">В этом листе нет строк с подрядчиком (или лист пуст).</div>`;
@@ -677,9 +703,18 @@ function renderBudgetTable() {
       if (span.skip) return ""; // ячейка "поглощена" объединением выше
       const rowspanAttr = span.rowspan > 1 ? ` rowspan="${span.rowspan}"` : "";
       const raw = item[c];
-      const value = (raw === undefined || raw === null || String(raw).trim() === "") ? "—" : raw;
-      if (isCommentColumn(c) && value !== "—") {
+      const isEmpty = raw === undefined || raw === null || String(raw).trim() === "";
+      const value = isEmpty ? "—" : raw;
+
+      if (isCommentColumn(c) && !isEmpty) {
         return `<td${rowspanAttr}><details><summary style="cursor:pointer;color:#dc2626;font-weight:600">Подробнее</summary><div style="margin-top:6px">${value}</div></details></td>`;
+      }
+      if (isStatusColumn(c) && !isEmpty) {
+        const sc = getStatusColor(String(value));
+        return `<td${rowspanAttr}><span style="display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${sc.bg};color:${sc.color}">${value}</span></td>`;
+      }
+      if (isTrackingColumn(c) && !isEmpty) {
+        return `<td${rowspanAttr} style="background:#ecfdf5;color:#047857;font-weight:600">${value}</td>`;
       }
       return `<td${rowspanAttr}>${value}</td>`;
     }).join("");
