@@ -75,7 +75,8 @@ async function readBudgetSheet(spreadsheetId, sheetName) {
 
     const firstCell = normalizeHeader(row[0]);
 
-    // Проверяем, не является ли эта строка заголовком раздела.
+    // Проверяем, не является ли эта строка заголовком раздела (по точному
+    // тексту разделов РДДМ-сметы, известному заранее).
     const matchedSection = Object.keys(SECTION_TO_CONTRACT_TYPE).find((key) =>
       firstCell.startsWith(key.slice(0, 20)) // сравниваем по началу, разделы длинные и могут отличаться переносами
     );
@@ -83,6 +84,16 @@ async function readBudgetSheet(spreadsheetId, sheetName) {
       currentContractType = SECTION_TO_CONTRACT_TYPE[matchedSection];
       continue; // это строка-разделитель, не строка с данными
     }
+
+    // Более общий случай — служебные строки-разделители и промежуточные
+    // итоги, которые встречаются в сметах с иной структурой (напр. ВКМП):
+    // "Итого по коду 200", "Код 300", "ИТОГО ПО ПРОЕКТУ" и т.п. В разных
+    // сметах эта отметка может стоять не строго в первой колонке (напр.
+    // из-за отступов/объединения ячеек) — поэтому проверяем первые
+    // несколько ячеек строки, а не только колонку A.
+    const markerPattern = /^(итого|код\s*\d+|всего)\b/i;
+    const isGenericMarkerRow = row.slice(0, 4).some((cell) => markerPattern.test(normalizeHeader(cell)));
+    if (isGenericMarkerRow) continue;
 
     // Пропускаем полностью пустые строки (нет ни наименования, ни подрядчика).
     const rowObj = {};
