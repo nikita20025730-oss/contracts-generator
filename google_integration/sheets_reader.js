@@ -47,13 +47,29 @@ async function readBudgetSheet(spreadsheetId, sheetName) {
     throw new Error(`Лист "${sheetName}" пуст или короче ожидаемого (меньше 4 строк).`);
   }
 
-  // Заголовки — строка 3 (индекс 2), нулевой индекс в rows.
-  const headerRow = rows[2].map(normalizeHeader);
+  // Определяем строку заголовков динамически: ищем среди первых 10 строк
+  // ту, где заполнено больше всего ячеек. У большинства смет заголовки на
+  // строке 3, но структура может отличаться (напр. у другого гранта) — если
+  // жёстко предполагать строку 3, при другой структуре почти все ячейки
+  // заголовка окажутся пустыми и распознается только 1 колонка.
+  let headerRowIndex = 2; // запасной вариант - строка 3, как было раньше
+  let maxFilledCells = -1;
+  const scanLimit = Math.min(10, rows.length);
+  for (let i = 0; i < scanLimit; i++) {
+    const row = rows[i] || [];
+    const filledCount = row.filter((cell) => cell && String(cell).trim() !== "").length;
+    if (filledCount > maxFilledCells) {
+      maxFilledCells = filledCount;
+      headerRowIndex = i;
+    }
+  }
+
+  const headerRow = (rows[headerRowIndex] || []).map(normalizeHeader);
 
   const items = [];
   let currentContractType = null;
 
-  for (let i = 3; i < rows.length; i++) {
+  for (let i = headerRowIndex + 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length === 0) continue;
 
