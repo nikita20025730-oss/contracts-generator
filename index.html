@@ -81,7 +81,7 @@
   <div class="nav-item" data-page="generator">📄 Генератор договоров</div>
   <div class="nav-item" data-page="smeta">📊 Учёт по смете</div>
   <div class="nav-item" data-page="planning">💰 Планирование расходов</div>
-  <div class="nav-item settings" data-page="settings">⚙ Реквизиты заказчиков</div>
+  <div class="nav-item settings" data-page="settings">⚙ Настройки</div>
 </div>
 
 <div class="main">
@@ -314,7 +314,7 @@ const PAGE_SUBTITLES = {
   generator: "Форма создаёт .docx-договор по одному из 6 шаблонов и запускает его скачивание.",
   smeta: "Учёт по каждому пункту сметы — с автоматической синхронизацией в Google Таблицу.",
   planning: "Планирование расходов по субсидиям на год и по месяцам.",
-  settings: "Реквизиты заказчиков, применяемые при генерации договоров.",
+  settings: "Реквизиты заказчиков и настройка субсидий/проектов.",
 };
 
 function goToPage(page) {
@@ -415,7 +415,11 @@ function renderSettings() {
   }).join("");
 
   const subsidyCards = subsidies.map(s => {
-    const projectChips = s.projects.map(p => `<span class="project-chip">${p.name}</span>`).join("");
+    const hidden = s.hiddenSheetNames || [];
+    const projectChips = s.projects.map(p => `<span class="project-chip">${p.name} <span data-hide-project="${s.id}:${p.id}" style="margin-left:6px;opacity:0.7;cursor:pointer" title="Скрыть проект">✕</span></span>`).join("");
+    const hiddenChips = hidden.length
+      ? `<div class="hint" style="margin-top:8px">Скрыто: ${hidden.map(name => `<span style="cursor:pointer;text-decoration:underline" data-unhide-project="${s.id}:${name}">${name} (вернуть)</span>`).join(", ")}</div>`
+      : "";
     return `<div class="subsidy-block">
       <h3>
         ${s.name}
@@ -426,6 +430,7 @@ function renderSettings() {
       <button class="btn btn-secondary btn-small" style="margin-top:10px" data-discover-projects="${s.id}">Обновить список проектов из таблицы</button>
       <div id="discoverStatus_${s.id}" style="margin-top:8px;font-size:12px"></div>
       <div style="margin-top:10px">${projectChips || '<span class="hint">Проекты появятся здесь после нажатия кнопки выше.</span>'}</div>
+      ${hiddenChips}
     </div>`;
   }).join("");
 
@@ -495,12 +500,35 @@ function attachSettingsHandlers() {
   document.querySelectorAll("[data-discover-projects]").forEach(btn => {
     btn.onclick = () => handleDiscoverProjects(btn.dataset.discoverProjects);
   });
+  document.querySelectorAll("[data-hide-project]").forEach(el => {
+    el.onclick = () => {
+      const [sId, pId] = el.dataset.hideProject.split(":");
+      const s = findSubsidy(sId);
+      const p = s.projects.find(x => x.id === pId);
+      if (!p) return;
+      if (!s.hiddenSheetNames) s.hiddenSheetNames = [];
+      s.hiddenSheetNames.push(p.sheetName);
+      s.projects = s.projects.filter(x => x.id !== pId);
+      saveSubsidies(subsidies);
+      renderApp();
+    };
+  });
+  document.querySelectorAll("[data-unhide-project]").forEach(el => {
+    el.onclick = () => {
+      const [sId, sheetName] = el.dataset.unhideProject.split(":");
+      const s = findSubsidy(sId);
+      s.hiddenSheetNames = (s.hiddenSheetNames || []).filter(n => n !== sheetName);
+      saveSubsidies(subsidies);
+      renderApp();
+    };
+  });
 }
 
 async function handleDiscoverProjects(subsidyId) {
   const s = findSubsidy(subsidyId);
   const statusEl = document.getElementById(`discoverStatus_${subsidyId}`);
   if (!s.spreadsheetUrl) { statusEl.textContent = "⚠️ Сначала вставьте ссылку на таблицу."; return; }
+  if (!s.hiddenSheetNames) s.hiddenSheetNames = [];
 
   statusEl.textContent = "Ищу листы в таблице...";
   try {
@@ -510,12 +538,14 @@ async function handleDiscoverProjects(subsidyId) {
     });
     const json = await res.json();
     if (res.ok && json.success) {
-      s.projects = json.tabs.map(tabName => {
+      const visibleTabs = json.tabs.filter(t => !s.hiddenSheetNames.includes(t));
+      s.projects = visibleTabs.map(tabName => {
         const existing = s.projects.find(p => p.sheetName === tabName);
         return existing || { id: "p_" + tabName.replace(/\s+/g, "_") + "_" + Date.now(), name: tabName, sheetName: tabName };
       });
       saveSubsidies(subsidies);
-      statusEl.textContent = `✅ Найдено листов: ${json.tabs.length} (${json.tabs.join(", ")})`;
+      const hiddenNote = s.hiddenSheetNames.length ? `, скрыто: ${s.hiddenSheetNames.length}` : "";
+      statusEl.textContent = `✅ Найдено листов: ${json.tabs.length}${hiddenNote}`;
       renderApp();
     } else {
       statusEl.textContent = "❌ " + (json.error || "Ошибка");
@@ -583,6 +613,33 @@ function renderSmetaPage() {
   ${loadSection}`;
 }
 
+function computeColumnSpans(items, columns) {
+  // Эвристика объединённых ячеек: если значение колонки пустое, а в
+  // предыдущей(-их) строке(-ах) для этой же колонки уже было значение —
+  // считаем это продолжением объединённой ячейки Google Таблицы и не
+  // выводим её отдельно, увеличивая rowspan исходной ячейки.
+  const spans = items.map(() => ({}));
+  columns.forEach(col => {
+    let lastNonEmptyIdx = null;
+    items.forEach((item, i) => {
+      const val = item[col];
+      const isEmpty = val === undefined || val === null || String(val).trim() === "";
+      if (isEmpty && lastNonEmptyIdx !== null) {
+        spans[i][col] = { skip: true };
+        spans[lastNonEmptyIdx][col].rowspan++;
+      } else {
+        spans[i][col] = { skip: false, rowspan: 1 };
+        lastNonEmptyIdx = isEmpty ? null : i;
+      }
+    });
+  });
+  return spans;
+}
+
+function isCommentColumn(colName) {
+  return /коммент/i.test(colName);
+}
+
 function renderBudgetTable() {
   if (smetaState.loadedItems === null) return `<div class="hint" style="margin-top:12px">Нажмите «Загрузить из Google Таблицы», чтобы увидеть строки сметы.</div>`;
   if (smetaState.loadedItems.length === 0) return `<div class="hint" style="margin-top:12px">В этом листе нет строк с подрядчиком (или лист пуст).</div>`;
@@ -590,6 +647,7 @@ function renderBudgetTable() {
   // Показываем ВСЕ колонки, которые реально есть в загруженных строках
   // (кроме служебных полей, начинающихся с "_" — они не из таблицы).
   const columns = Object.keys(smetaState.loadedItems[0]).filter(k => !k.startsWith("_"));
+  const spans = computeColumnSpans(smetaState.loadedItems, columns);
 
   const rows = smetaState.loadedItems.map((item, idx) => {
     const isEditing = smetaState.editingRow === idx;
@@ -613,10 +671,20 @@ function renderBudgetTable() {
         </div>
         <div id="trackStatus_${idx}" style="margin-top:8px;font-size:12px"></div>
       </td></tr>` : "";
-    return `<tr>
-      ${columns.map(c => `<td>${item[c] || "—"}</td>`).join("")}
-      <td><button class="btn btn-primary btn-small" data-edit-tracking="${idx}">Обновить учёт</button></td>
-    </tr>${trackingForm}`;
+
+    const cells = columns.map(c => {
+      const span = spans[idx][c];
+      if (span.skip) return ""; // ячейка "поглощена" объединением выше
+      const rowspanAttr = span.rowspan > 1 ? ` rowspan="${span.rowspan}"` : "";
+      const raw = item[c];
+      const value = (raw === undefined || raw === null || String(raw).trim() === "") ? "—" : raw;
+      if (isCommentColumn(c) && value !== "—") {
+        return `<td${rowspanAttr}><details><summary style="cursor:pointer;color:#dc2626;font-weight:600">Подробнее</summary><div style="margin-top:6px">${value}</div></details></td>`;
+      }
+      return `<td${rowspanAttr}>${value}</td>`;
+    }).join("");
+
+    return `<tr>${cells}<td><button class="btn btn-primary btn-small" data-edit-tracking="${idx}">Обновить учёт</button></td></tr>${trackingForm}`;
   }).join("");
 
   return `<div style="overflow-x:auto"><table class="budget-table"><thead><tr>${columns.map(c=>`<th>${c}</th>`).join("")}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -660,7 +728,7 @@ async function handleLoadBudget() {
   const project = findProject(subsidy, smetaState.selectedProjectId);
   const siteUrl = window.location.origin;
   const statusEl = document.getElementById("smetaLoadStatus");
-  if (!subsidy.spreadsheetUrl) { alert("Сначала укажите ссылку на Google Таблицу для этой субсидии в разделе ⚙ Реквизиты заказчиков"); return; }
+  if (!subsidy.spreadsheetUrl) { alert("Сначала укажите ссылку на Google Таблицу для этой субсидии в разделе ⚙ Настройки"); return; }
 
   statusEl.textContent = "Загружаю...";
   try {
@@ -824,7 +892,7 @@ function renderStep1() {
   <div class="radio-group" id="typeOptions">${typeOptions.map(o => `<div class="radio-option ${state.contractType===o.type && state.contractorVariant===o.variant?'selected':''}" data-type="${o.type}" data-variant="${o.variant}">${o.label}</div>`).join("")}</div>
   <label class="required">Грант</label>
   <select id="grantSelect">${Object.keys(GRANTS).map(id => `<option value="${id}" ${state.grantId===id?'selected':''}>${GRANTS[id].label}</option>`).join("")}</select>
-  <div class="hint">Заказчик подставляется автоматически в зависимости от выбранного гранта. Реквизиты заказчиков можно посмотреть и изменить в разделе «⚙ Реквизиты заказчиков» вверху страницы.</div>
+  <div class="hint">Заказчик подставляется автоматически в зависимости от выбранного гранта. Реквизиты заказчиков можно посмотреть и изменить в разделе «⚙ Настройки» вверху страницы.</div>
   ${grantWarning}</div>
   <div class="nav-buttons"><div></div><button class="btn btn-primary" id="nextBtn" ${!state.contractType?'disabled':''}>Далее →</button></div>`;
 }
