@@ -41,7 +41,7 @@
   .btn-secondary { background: #f0f0f0; color: #333; }
   .btn-small { padding: 6px 12px; font-size: 12px; }
   .btn-danger-text { background: none; color: #dc2626; font-size: 13px; padding: 4px 8px; border: none; cursor: pointer; }
-  .nav-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
+  .nav-buttons { display: flex; justify-content: space-between; margin-top: 20px; max-width: 900px; }
   .contractor-card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; font-size: 13px; }
   .contractor-card:hover { border-color: #dc2626; }
   .contractor-card.selected { border-color: #dc2626; background: #fef2f2; }
@@ -663,7 +663,20 @@ function getStatusColor(value) {
 // платёжек) — если в них уже есть значение, ячейка подсвечивается зелёным,
 // чтобы сразу было видно, что по этой позиции уже что-то оформлено.
 function isTrackingColumn(colName) {
-  return /договор|счёт|счет|упд|акт|платежн/i.test(colName) && !isStatusColumn(colName);
+  if (isStatusColumn(colName)) return false;
+  // \b (граница слова) в JS не распознаёт кириллицу как "словесные" символы,
+  // поэтому регулярка с \b работает непредсказуемо на русском тексте.
+  // Вместо этого разбиваем заголовок на отдельные слова и сравниваем их
+  // целиком - это исключает случайные совпадения внутри других слов
+  // (напр. "акт" внутри "фактически", "характеристика", "контакт").
+  const words = String(colName).toLowerCase().split(/[^а-яёa-z0-9]+/).filter(Boolean);
+  return words.some((w) =>
+    w.startsWith("договор") ||
+    w === "счёт" || w === "счет" ||
+    w === "упд" ||
+    w === "акт" ||
+    w.startsWith("платежн")
+  );
 }
 
 function renderBudgetTable() {
@@ -674,23 +687,23 @@ function renderBudgetTable() {
   // (кроме служебных полей, начинающихся с "_" — они не из таблицы).
   const columns = Object.keys(smetaState.loadedItems[0]).filter(k => !k.startsWith("_"));
   const spans = computeColumnSpans(smetaState.loadedItems, columns);
+  // Реальные колонки учёта - определяются по тем заголовкам, что
+  // действительно есть в загруженной таблице, а не по угаданным заранее
+  // названиям. Это гарантирует, что запись обратно попадёт точно в нужную
+  // колонку, какой бы текст заголовка ни был в конкретной смете.
+  const trackingColumns = columns.filter(isTrackingColumn);
 
   const rows = smetaState.loadedItems.map((item, idx) => {
     const isEditing = smetaState.editingRow === idx;
+    const trackingFieldsHtml = trackingColumns.length ? trackingColumns.map((c, fi) => `
+      <div style="margin-top:${fi===0?'0':'12px'}">
+        <label>${c}</label>
+        <input type="text" data-track-field="${idx}:${c}" value="${(item[c] && String(item[c]).trim() !== '' ? item[c] : '').toString().replace(/"/g,'&quot;')}">
+      </div>
+    `).join("") : `<div class="hint">В этой таблице не нашлось колонок учёта (Договор/Счёт/УПД/акт/Платёжное) — писать пока некуда.</div>`;
     const trackingForm = isEditing ? `
       <tr><td colspan="${columns.length + 1}" style="background:#fafafa">
-        <div class="row2">
-          <div><label>Договор — Номер</label><input type="text" id="track_contract_number_${idx}"></div>
-          <div><label>Договор — Дата</label><input type="text" id="track_contract_date_${idx}"></div>
-        </div>
-        <div class="row2">
-          <div><label>Счёт — Номер</label><input type="text" id="track_invoice_number_${idx}"></div>
-          <div><label>Счёт — Дата</label><input type="text" id="track_invoice_date_${idx}"></div>
-        </div>
-        <div class="row2">
-          <div><label>УПД/акт — Номер</label><input type="text" id="track_act_number_${idx}"></div>
-          <div><label>УПД/акт — Дата</label><input type="text" id="track_act_date_${idx}"></div>
-        </div>
+        ${trackingFieldsHtml}
         <div style="margin-top:12px">
           <button class="btn btn-primary btn-small" data-save-tracking="${idx}">Сохранить в Таблицу</button>
           <button class="btn btn-secondary btn-small" data-cancel-tracking="${idx}">Отмена</button>
@@ -791,18 +804,10 @@ async function handleSaveTracking(idx) {
   const statusEl = document.getElementById(`trackStatus_${idx}`);
 
   const updates = {};
-  const cNum = document.getElementById(`track_contract_number_${idx}`).value;
-  const cDate = document.getElementById(`track_contract_date_${idx}`).value;
-  const iNum = document.getElementById(`track_invoice_number_${idx}`).value;
-  const iDate = document.getElementById(`track_invoice_date_${idx}`).value;
-  const aNum = document.getElementById(`track_act_number_${idx}`).value;
-  const aDate = document.getElementById(`track_act_date_${idx}`).value;
-  if (cNum) updates["Договор → Номер"] = cNum;
-  if (cDate) updates["Договор → Дата"] = cDate;
-  if (iNum) updates["Счёт → Номер"] = iNum;
-  if (iDate) updates["Счёт → Дата"] = iDate;
-  if (aNum) updates["УПД/ акт → Номер"] = aNum;
-  if (aDate) updates["УПД/ акт → Дата"] = aDate;
+  document.querySelectorAll(`[data-track-field^="${idx}:"]`).forEach(inp => {
+    const header = inp.dataset.trackField.slice(String(idx).length + 1); // отрезаем "idx:" спереди
+    if (inp.value && inp.value.trim() !== "") updates[header] = inp.value;
+  });
 
   if (Object.keys(updates).length === 0) { statusEl.textContent = "Нечего сохранять — заполните хотя бы одно поле."; return; }
 
