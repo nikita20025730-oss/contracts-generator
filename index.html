@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Генератор договоров</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: #1a1a1a; background: #fafafa; display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; flex-shrink: 0; background: #1e293b; color: #e2e8f0; padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar h1 { font-size: 15px; padding: 0 20px 16px; margin: 0; border-bottom: 1px solid #334155; }
+  .nav-item { display: block; padding: 12px 20px; cursor: pointer; font-size: 14px; color: #cbd5e1; border-left: 3px solid transparent; }
+  .nav-item:hover { background: #273548; }
+  .nav-item.active { background: #273548; color: white; border-left-color: #2563eb; font-weight: 600; }
+  .nav-item.settings { margin-top: 20px; border-top: 1px solid #334155; padding-top: 16px; font-size: 13px; color: #94a3b8; }
+  .main { flex: 1; padding: 24px 28px 80px; max-width: 960px; }
+  .subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
+  .steps-nav { display: flex; gap: 4px; margin-bottom: 28px; flex-wrap: wrap; }
+  .steps-nav .dot { flex: 1; min-width: 60px; text-align: center; padding: 8px 4px; border-radius: 6px; font-size: 12px; background: #e5e5e5; color: #888; cursor: default; }
+  .steps-nav .dot.active { background: #2563eb; color: white; font-weight: 600; }
+  .steps-nav .dot.done { background: #d1fae5; color: #047857; }
+  .card { background: white; border: 1px solid #e5e5e5; border-radius: 10px; padding: 24px; margin-bottom: 16px; }
+  h2 { font-size: 17px; margin-top: 0; margin-bottom: 18px; }
+  h3 { font-size: 14px; margin: 20px 0 10px; color: #444; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; margin-top: 12px; color: #333; }
+  label.required::after { content: " *"; color: #dc2626; }
+  input[type=text], input[type=number], select, textarea { width: 100%; padding: 9px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; }
+  textarea { min-height: 60px; resize: vertical; }
+  .hint { font-size: 12px; color: #888; margin-top: 2px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .radio-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .radio-option { border: 1px solid #ccc; border-radius: 8px; padding: 10px 14px; cursor: pointer; font-size: 13px; user-select: none; }
+  .radio-option.selected { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+  .btn { padding: 11px 22px; font-size: 14px; font-weight: 600; border: none; border-radius: 7px; cursor: pointer; }
+  .btn-primary { background: #2563eb; color: white; }
+  .btn-primary:disabled { background: #aac0f0; cursor: not-allowed; }
+  .btn-secondary { background: #f0f0f0; color: #333; }
+  .btn-small { padding: 6px 12px; font-size: 12px; }
+  .btn-danger-text { background: none; color: #dc2626; font-size: 13px; padding: 4px 8px; border: none; cursor: pointer; }
+  .nav-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
+  .contractor-card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; font-size: 13px; }
+  .contractor-card:hover { border-color: #2563eb; }
+  .contractor-card.selected { border-color: #2563eb; background: #eff6ff; }
+  table.row-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  table.row-table th, table.row-table td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+  table.row-table th { background: #f5f5f5; font-weight: 600; }
+  table.row-table input { border: none; padding: 4px; font-size: 12px; width: 100%; }
+  .appendix-block { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #fcfcfc; }
+  .appendix-block h4 { margin: 0 0 10px; font-size: 14px; }
+  #resultBox { margin-top: 20px; padding: 16px; border-radius: 8px; white-space: pre-wrap; font-family: monospace; font-size: 13px; display: none; }
+  .success { background: #ecfdf5; border: 1px solid #10b981; }
+  .error { background: #fef2f2; border: 1px solid #ef4444; }
+  .warning-box { background: #fffbeb; border: 1px solid #f59e0b; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-top: 8px; }
+  .checkbox-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 16px; }
+  .checkbox-row input { width: auto; margin-top: 3px; }
+  .checkbox-row label { margin: 0; font-weight: normal; }
+  .review-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .review-table td { padding: 5px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .review-table td:first-child { color: #666; width: 220px; }
+  .field-error { border-color: #dc2626 !important; background: #fef2f2 !important; }
+  .subsidy-block { border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+  .subsidy-block h3 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; }
+  .project-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #ccc; border-radius: 16px; padding: 5px 12px; font-size: 12px; margin: 4px 6px 4px 0; cursor: pointer; }
+  .project-chip.selected { background: #2563eb; color: white; border-color: #2563eb; }
+  .budget-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+  .budget-table th, .budget-table td { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: left; vertical-align: top; }
+  .budget-table th { background: #f5f5f5; }
+  .budget-table tr:hover { background: #fafafa; }
+  .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+  .month-cell { border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
+  .month-cell label { margin-top: 0; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <h1>Контрактный отдел</h1>
+  <div class="nav-item" data-page="generator">📄 Генератор договоров</div>
+  <div class="nav-item" data-page="smeta">📊 Учёт по смете</div>
+  <div class="nav-item" data-page="planning">💰 Планирование расходов</div>
+  <div class="nav-item settings" data-page="settings">⚙ Реквизиты заказчиков</div>
+</div>
+
+<div class="main">
+  <div class="subtitle" id="pageSubtitle"></div>
+  <div class="steps-nav" id="stepsNav"></div>
+  <div id="app"></div>
+</div>
+
+<script>
+const CUSTOMERS_DEFAULT = {
+  spbguptd: {
+    label: "СПбГУПТД",
+    short_name: "СПбГУПТД",
+    full_name: "Федеральное государственное бюджетное образовательное учреждение высшего образования «Санкт-Петербургский государственный университет промышленных технологий и дизайна»",
+    req_full_name: 'ФЕДЕРАЛЬНОЕ ГОСУДАРСТВЕННОЕ БЮДЖЕТНОЕ ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ВЫСШЕГО ОБРАЗОВАНИЯ "САНКТ-ПЕТЕРБУРГСКИЙ ГОСУДАРСТВЕННЫЙ УНИВЕРСИТЕТ ПРОМЫШЛЕННЫХ ТЕХНОЛОГИЙ И ДИЗАЙНА"',
+    req_full_name_guillemet: 'ФЕДЕРАЛЬНОЕ ГОСУДАРСТВЕННОЕ БЮДЖЕТНОЕ ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ВЫСШЕГО ОБРАЗОВАНИЯ «САНКТ-ПЕТЕРБУРГСКИЙ ГОСУДАРСТВЕННЫЙ УНИВЕРСИТЕТ ПРОМЫШЛЕННЫХ ТЕХНОЛОГИЙ И ДИЗАЙНА»',
+    signatory_clause: "в лице проректора по информационной политике и приему Коробовцевой Анны Андреевны, действующего на основании доверенности от 16.01.2025 г. № 38-01-01-12/01-37",
+    address: "191186, ГОРОД САНКТ-ПЕТЕРБУРГ, УЛИЦА БОЛЬШАЯ МОРСКАЯ, ДОМ 18, ЛИТЕР А",
+    inn_kpp: "7808042283/784001001",
+    bank_authority: "Управление Федерального казначейства по г. Санкт-Петербургу ОКЦ № 1 ВВГУ Банка России//УФК по Нижегородской области г Нижний Новгород",
+    eks: "40102810745370000024",
+    ks: "03215643000000013200",
+    bik: "012202102",
+    personal_account: "711X7200001",
+    signatory_position_short: "Проректор по ИПП СПбГУПТД",
+    signatory_initials: "А.А. Коробовцева",
+    signatory_initials_reversed: "Коробовцева А.А.",
+  },
+  npt: {
+    label: "ООО «НП ТЕХНОЛОГИИ»",
+    short_name: "НПТ",
+    full_name: "Общество с ограниченной ответственностью «НП ТЕХНОЛОГИИ»",
+    req_full_name: 'ООО "НП ТЕХНОЛОГИИ"',
+    req_full_name_guillemet: "ООО «НП ТЕХНОЛОГИИ»",
+    signatory_clause: "в лице генерального директора Тихоновой Марии Сергеевны, действующего на основании Устава",
+    address: "197375, Г. САНКТ-ПЕТЕРБУРГ, ВН.ТЕР. Г. МУНИЦИПАЛЬНЫЙ ОКРУГ КОЛОМЯГИ, ПЕР ЗЕМСКИЙ, ДОМ 10, ЛИТЕРА А, КВАРТИРА 54",
+    inn_kpp: "7840510426/781401001",
+    bank_authority: "Управление федерального казначейства по г. Санкт-Петербургу ОКЦ №1 ВВГУ Банка России//УФК по Нижегородской области г. Нижний Новгород",
+    eks: "40102810745370000024",
+    ks: "03215643000000013200",
+    bik: "012202102",
+    personal_account: "711ZUЭ15001",
+    signatory_position_short: "Генеральный директор",
+    signatory_initials: "М.С. Тихонова",
+    signatory_initials_reversed: "Тихонова М.С.",
+    _warning: "Формулировка «действующего на основании Устава» не подтверждена реальным договором НПТ (в референсном документе этот пункт не был приведён полностью). Проверьте перед использованием.",
+  },
+};
+
+// Правки пользователя к реквизитам заказчиков хранятся отдельно от
+// дефолтных значений и переживают перезагрузку страницы (localStorage).
+function loadCustomerOverrides() {
+  try {
+    const raw = window.localStorage.getItem("customerOverrides");
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function saveCustomerOverrides(overrides) {
+  window.localStorage.setItem("customerOverrides", JSON.stringify(overrides));
+}
+let customerOverrides = loadCustomerOverrides();
+function getCustomer(key) {
+  return { ...CUSTOMERS_DEFAULT[key], ...(customerOverrides[key] || {}) };
+}
+
+const GRANTS = {
+  vkmp: { label: "ВКМП (Росмолодёжь)", customer: "spbguptd", grantor_name: "ФЕДЕРАЛЬНЫМ АГЕНТСТВОМ ПО ДЕЛАМ МОЛОДЕЖИ", grant_agreement_number: "091-15-2025-077", grant_agreement_date: "22.07.2025", igk: "000000Ю109125PQP0002" },
+  rddm_spbguptd: { label: "РДДМ (СПбГУПТД)", customer: "spbguptd", grantor_name: "Движение Первых", grant_agreement_number: "592-15-2026-034", grant_agreement_date: "19.05.2026", igk: "000000Ю159226P4I0002", _warning: "Формулировка грантодателя не проверена на реальном договоре РДДМ (образцы были только по гранту ВКМП). Сверьте текст преамбулы после генерации." },
+  rddm_npt: { label: "РДДМ (НПТ)", customer: "npt", grantor_name: "Движение Первых", grant_agreement_number: "592-11-2026-013", grant_agreement_date: "19.05.2026", igk: "000000Ю159226P740002", _warning: "Формулировка грантодателя не проверена на реальном договоре РДДМ (образцы были только по гранту ВКМП). Сверьте текст преамбулы после генерации." },
+};
+
+const CONTRACT_CONFIGS = {
+  "services_200|ip": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги — ИП", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, appendixCount: 2, loopNames: ["specialists", "specialists2"], bodyFields: ["subject_description", "subject_description_short", "project_name", "total_period_start", "total_period_end"], appendixFields: ["project_solution_name", "period", "place"], appendixTotalPattern: "appendixN_total", rowFields: [{name:"specialist_type",label:"Тип специалиста"},{name:"specialist_description",label:"Описание"},{name:"specialist_schedule_note",label:"Заметка о графике"},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
+  "services_200|ip_ads": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги (реклама) — ИП", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, appendixCount: 2, loopNames: ["specialists1", "specialists2"], bodyFields: ["subject_description", "subject_description_short", "project_name", "total_period_start", "total_period_end"], appendixFields: ["project_solution_name"], appendixTotalPattern: "appendixN_total", rowFields: [{name:"specialist_type",label:"Тип услуги"},{name:"specialist_description",label:"Описание"},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
+  "services_200|samozanyaty": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги — Самозанятый", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, appendixCount: 1, loopNames: ["specialists"], bodyFields: ["subject_description", "project_name", "service_deadline"], appendixFields: ["project_solution_name"], appendixTotalPattern: "appendix_total", rowFields: [{name:"specialist_type",label:"Тип услуги"},{name:"specialist_description",label:"Описание"},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
+  "supply_300|ip": { calcFields: {qty:"item_quantity",price:"item_unit_price",total:"item_line_total"}, label: "Поставка — ИП", roleLabels: { customer: "Заказчик", contractor: "Поставщик" }, appendixCount: 2, loopNames: ["items1", "items2"], bodyFields: ["subject_description", "project_name", "delivery_deadline"], appendixFields: ["project_solution_name", "goods_description_short"], appendixTotalPattern: "appendixN_total", rowFields: [{name:"item_number",label:"№"},{name:"item_name",label:"Наименование"},{name:"item_tech_specs",label:"Тех. характеристики"},{name:"item_country_of_origin",label:"Страна происх.",default:"Российская Федерация"},{name:"item_quantity",label:"Кол-во"},{name:"item_unit",label:"Ед. изм."},{name:"item_unit_price",label:"Цена, руб."},{name:"item_line_total",label:"Сумма, руб."},{name:"item_delivery_address",label:"Место поставки"}] },
+  "supply_300|ooo": { calcFields: {qty:"item_quantity",price:"item_unit_price",total:"item_line_total"}, label: "Поставка — ООО", roleLabels: { customer: "Заказчик", contractor: "Поставщик" }, appendixCount: 1, loopNames: ["items"], bodyFields: ["subject_description", "project_name", "delivery_deadline"], appendixFields: [], appendixTotalPattern: "appendix_total", rowFields: [{name:"item_number",label:"№"},{name:"item_name",label:"Наименование"},{name:"item_tech_specs",label:"Тех. характеристики"},{name:"item_country_of_origin",label:"Страна происх.",default:"Российская Федерация"},{name:"item_quantity",label:"Кол-во"},{name:"item_unit",label:"Ед. изм."},{name:"item_unit_price",label:"Цена, руб."},{name:"item_line_total",label:"Сумма, руб."},{name:"item_delivery_address",label:"Место поставки"}] },
+  "rental_400|ip": { calcFields: {qty:"item_quantity",price:"item_price_per_day",total:"item_line_total"}, label: "Аренда — ИП", roleLabels: { customer: "Арендатор", contractor: "Арендодатель" }, appendixCount: 1, loopNames: ["items"], bodyFields: ["rental_object_type", "project_solution_name", "rental_start_date", "rental_end_date"], appendixFields: [], appendixTotalPattern: null, rowFields: [{name:"item_number",label:"№"},{name:"item_name",label:"Наименование оборудования"},{name:"item_quantity",label:"Кол-во"},{name:"item_price_per_day",label:"Цена/день, руб."},{name:"item_line_total",label:"Сумма, руб."}] },
+};
+
+const CONTRACTOR_FIELD_SETS = {
+  ip: [{name:"contractor_full_name",label:"Полное наименование (ИП ФИО заглавными)"},{name:"contractor_ogrnip",label:"ОГРНИП"},{name:"contractor_ogrn_date",label:"Дата регистрации ОГРНИП"},{name:"contractor_address",label:"Адрес"},{name:"contractor_inn",label:"ИНН"},{name:"contractor_bank_account",label:"Расчётный счёт"},{name:"contractor_bank_name",label:"Наименование банка"},{name:"contractor_corr_account",label:"Корр. счёт"},{name:"contractor_bik",label:"БИК"},{name:"contractor_signatory_initials",label:"Подпись (напр. 'П.В. Шмелев')"}],
+  ooo: [{name:"contractor_full_name",label:"Полное наименование ООО"},{name:"contractor_short_name",label:"Краткое название (без кавычек)"},{name:"contractor_signatory_position",label:"Должность подписанта"},{name:"contractor_signatory_full_name",label:"ФИО подписанта (в род. падеже)"},{name:"contractor_kpp",label:"КПП"},{name:"contractor_ogrn",label:"ОГРН"},{name:"contractor_address",label:"Адрес"},{name:"contractor_inn",label:"ИНН"},{name:"contractor_bank_account",label:"Расчётный счёт"},{name:"contractor_bank_name",label:"Наименование банка (часть 1)"},{name:"contractor_bank_name_cont",label:"Наименование банка (часть 2)"},{name:"contractor_corr_account",label:"Корр. счёт"},{name:"contractor_bik",label:"БИК"},{name:"contractor_signatory_initials",label:"Подпись"}],
+  samozanyaty: [{name:"contractor_full_name",label:"ФИО (обычным регистром)"},{name:"contractor_passport_number",label:"Паспорт (серия номер)"},{name:"contractor_passport_issued_by",label:"Кем выдан"},{name:"contractor_passport_issued_date",label:"Дата выдачи"},{name:"contractor_address",label:"Адрес регистрации"},{name:"contractor_inn",label:"ИНН"},{name:"contractor_bank_account",label:"Расчётный счёт"},{name:"contractor_bank_name",label:"Наименование банка"},{name:"contractor_corr_account",label:"Корр. счёт"},{name:"contractor_bik",label:"БИК"},{name:"contractor_signatory_initials",label:"Подпись"}],
+};
+
+const CONTRACTORS_REGISTRY = [
+  {id:"shmelev",type:"ip",short_name:"ИП Шмелев П.В.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ШМЕЛЕВ ПАВЕЛ ВЛАДИМИРОВИЧ",contractor_ogrnip:"318784700021981",contractor_ogrn_date:"26.01.2018",contractor_address:"196105, САНКТ-ПЕТЕРБУРГ, УЛ. БЛАГОДАТНАЯ Д. 16, КВ. 1",contractor_inn:"781015941806",contractor_bank_account:"40802810970010083493",contractor_bank_name:"МОСКОВСКИЙ ФИЛИАЛ АО КБ «МОДУЛЬБАНК»",contractor_corr_account:"30101810645250000092",contractor_bik:"044525092",contractor_signatory_initials:"П.В. Шмелев"},
+  {id:"lenshina",type:"samozanyaty",short_name:"Самозанятая Леньшина А.П.",contractor_full_name:"Леньшина Арина Павловна",contractor_passport_number:"4021 896174",contractor_passport_issued_by:"ГУ МВД России по г. Санкт-Петербургу и Ленинградской области",contractor_passport_issued_date:"07.07.2021",contractor_address:"ВЛАДИМИРСКАЯ ОБЛ, Г. ВЛАДИМИР, УЛ. ДОБРОСЕЛЬСКАЯ, Д. 173, КВ. 13",contractor_inn:"332903616352",contractor_bank_account:"40817810600115159881",contractor_bank_name:"АО «ТБанк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.П. Леньшина"},
+  {id:"minenkova",type:"ip",short_name:"ИП Миненкова В.Ю.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МИНЕНКОВА ВИКТОРИЯ ЮРЬЕВНА",contractor_ogrnip:"325784700253862",contractor_ogrn_date:"06.08.2025",contractor_address:"196084, Г. САНКТ-ПЕТЕРБУРГ, ПАРФЕНОВСКАЯ УЛ. Д. 14, К.1, СТР.1, КВ.958",contractor_inn:"781661467406",contractor_bank_account:"40802810320000824409",contractor_bank_name:"ООО «Банк Точка»",contractor_corr_account:"30101810745374525104",contractor_bik:"044525104",contractor_signatory_initials:"В.Ю. Миненкова"},
+  {id:"mokin",type:"ip",short_name:"ИП Мокин Д.К.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МОКИН ДЕНИС КОНСТАНТИНОВИЧ",contractor_ogrnip:"310784706100302",contractor_ogrn_date:"02.03.2010",contractor_address:"193079, САНКТ-ПЕТЕРБУРГ Г, ОКТЯБРЬСКАЯ НАБ., ДОМ № 64, КОРПУС 1, КВАРТИРА 171",contractor_inn:"781136771450",contractor_bank_account:"40802810400190060820",contractor_bank_name:"Филиал «Корпоративный» ПАО «Совкомбанк»",contractor_corr_account:"30101810445250000360",contractor_bik:"044525360",contractor_signatory_initials:"Д.К. Мокин"},
+  {id:"abika",type:"ooo",short_name:"ООО «АБИКА»",contractor_full_name:'ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "АБИКА"',contractor_short_name:"АБИКА",contractor_signatory_position:"Директора",contractor_signatory_full_name:"Елисеева Алексея Леонидовича",contractor_kpp:"784001001",contractor_ogrn:"1157847335953",contractor_address:"191002, САНКТ-ПЕТЕРБУРГ, УЛ. РАЗЪЕЗЖАЯ 26-28Б, ПОМ. 5Н",contractor_inn:"7816286653",contractor_bank_account:"40702810470110000662",contractor_bank_name:"МОСКОВСКИЙ ФИЛИАЛ",contractor_bank_name_cont:'АО КБ "МОДУЛЬБАНК" Г.МОСКВА',contractor_corr_account:"30101810645250000092",contractor_bik:"044525092",contractor_signatory_initials:"А.Л. Елисеев"},
+  {id:"murin",type:"ip",short_name:"ИП Мурин И.В. (аренда)",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МУРИН ИГОРЬ ВАСИЛЬЕВИЧ",contractor_ogrnip:"317784700103542",contractor_ogrn_date:"07.04.2017",contractor_address:"191024, Г. САНКТ-ПЕТЕРБУРГ, УЛ. ХЕРСОНСКАЯ, Д. 10, КВ.51",contractor_inn:"782512361910",contractor_bank_account:"40802810800000121920",contractor_bank_name:"АО «Тинькофф Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"И.В. Мурин"},
+  {id:"faul",type:"ip",short_name:"ИП Фауль А.М.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ФАУЛЬ АРИНА МАКСИМОВНА",contractor_ogrnip:"325784700132267",contractor_ogrn_date:"22.04.2025",contractor_address:"195112, РОССИЯ, Г САНКТ-ПЕТЕРБУРГ, ПР-КТ ЗАНЕВСКИЙ, Д 20, А, КВ 6",contractor_inn:"220917649066",contractor_bank_account:"40802810700008206484",contractor_bank_name:"АО «Т Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.М. Фауль"},
+];
+
+const BODY_FIELD_LABELS = { subject_description:"Описание услуги/предмета договора (для п.1.1)", subject_description_short:"Краткое описание услуги (для списка приложений)", project_name:"Название проекта (по гранту)", total_period_start:"Начало общего периода (число)", total_period_end:"Конец общего периода (с месяцем и годом)", service_deadline:"Срок оказания услуг (дата, 'до ...')", delivery_deadline:"Срок поставки (дата)", rental_object_type:"Тип объекта аренды (напр. 'Оборудование')", project_solution_name:"Проект", rental_start_date:"Начало срока аренды", rental_end_date:"Конец срока аренды" };
+const APPENDIX_FIELD_LABELS = { project_solution_name:"Проект", period:"Период оказания услуг", place:"Место оказания услуг", goods_description_short:"Краткое описание товаров" };
+
+function buildActingBasis(contractorVariant, contractor) {
+  if (contractorVariant === "ip" || contractorVariant === "ip_ads") return `действующий на основании ОГРНИП ${contractor.contractor_ogrnip || ""} от ${contractor.contractor_ogrn_date || ""}`;
+  if (contractorVariant === "ooo") return "действующего на основании устава";
+  return undefined;
+}
+
+function buildPayload(state, config, grant) {
+  if (!state.notEmployeeConfirmed) throw new Error("Не подтверждено: контрагент не является сотрудником/студентом СПбГУПТД.");
+  const customer = getCustomer(grant.customer);
+  const data = {
+    contract_number: state.contractNumber, contract_date: state.contractDate, polozhenie_clause: state.polozhenieClause,
+    grant_agreement_number: grant.grant_agreement_number, grant_agreement_date: grant.grant_agreement_date, grantor_name: grant.grantor_name, igk: grant.igk,
+    customer_short_name: customer.short_name, customer_full_name: customer.full_name,
+    customer_req_full_name: customer.req_full_name, customer_req_full_name_guillemet: customer.req_full_name_guillemet,
+    customer_signatory_clause: customer.signatory_clause, customer_address: customer.address, customer_inn_kpp: customer.inn_kpp,
+    customer_bank_authority: customer.bank_authority, customer_eks: customer.eks, customer_ks: customer.ks, customer_bik: customer.bik,
+    customer_personal_account: customer.personal_account, customer_signatory_position_short: customer.signatory_position_short,
+    customer_signatory_initials: customer.signatory_initials, customer_signatory_initials_reversed: customer.signatory_initials_reversed,
+    vat_clause: state.vatClause || "НДС не облагается", payment_term_days: state.paymentTermDays || "7", payment_term_days_words: state.paymentTermDaysWords || "Семи",
+  };
+  Object.assign(data, state.contractor);
+  const actingBasis = buildActingBasis(state.contractorVariant, state.contractor);
+  if (actingBasis) data.contractor_acting_basis = actingBasis;
+  for (const field of config.bodyFields) data[field] = state.bodyValues[field];
+  // Сумма договора - всегда авто-считается из строк приложений/аренды (см. computeContractTotalRub), не вводится вручную
+  data.total_amount_rub = computeContractTotalRub(state, config);
+  const appendicesForLoop = [];
+  state.appendices.forEach((appendix, idx) => {
+    const n = idx + 1;
+    appendicesForLoop.push({ appendix_number: String(n), project_solution_name: appendix.values.project_solution_name, subject_description_short: state.bodyValues.subject_description_short, goods_description_short: appendix.values.goods_description_short });
+    if (n === 1) { data.appendix1_number = "1"; }
+    for (const field of config.appendixFields) {
+      const finalKey = config.appendixCount > 1 ? `appendix${n}_${field}` : (field === "project_solution_name" ? "project_solution_name" : `appendix_${field}`);
+      data[finalKey] = appendix.values[field];
+    }
+    const appendixTotal = computeAppendixTotalRub(appendix, config);
+    if (config.appendixTotalPattern === "appendixN_total") data[`appendix${n}_total_rub`] = appendixTotal;
+    else if (config.appendixTotalPattern === "appendix_total") data.appendix_total_rub = appendixTotal;
+    data[config.loopNames[idx]] = appendix.rows;
+  });
+  data.appendices = appendicesForLoop;
+  if (state.rental) {
+    const dailyTotal = computeRentalDailyTotalRub(state, config);
+    const days = parseInt(state.rental.days) || 1;
+    data.rental_start_date = state.rental.startDate;
+    data.rental_end_date = state.rental.endDate;
+    data.rental_daily_total_rub = dailyTotal;
+    data.rental_total_rub = dailyTotal * days;
+  }
+  return { contractType: state.contractType, contractorVariant: state.contractorVariant, fileName: `Договор_${state.contractNumber}.docx`, data, sheetsWriteBack: state.sheetsWriteBack || undefined };
+}
+
+// ============================================================
+// АВТОСЧЁТ СУММ — количество × цена = сумма строки, сумма приложения =
+// сумма всех строк, сумма договора = сумма всех приложений (или аренды).
+// ============================================================
+function parseRuNumber(str) {
+  if (str === undefined || str === null || str === "") return 0;
+  const cleaned = String(str).replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+function formatRuNumber(n) {
+  if (!isFinite(n)) n = 0;
+  const fixed = n.toFixed(2);
+  const [intPart, decPart] = fixed.split(".");
+  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${withSpaces},${decPart}`;
+}
+function computeRowTotal(row, config) {
+  const qty = parseRuNumber(row[config.calcFields.qty]);
+  const price = parseRuNumber(row[config.calcFields.price]);
+  return qty * price;
+}
+function computeAppendixTotalRub(appendix, config) {
+  return appendix.rows.reduce((sum, row) => sum + computeRowTotal(row, config), 0);
+}
+function computeContractTotalRub(state, config) {
+  if (state.contractType === "rental_400") {
+    const dailyTotal = computeRentalDailyTotalRub(state, config);
+    const days = parseInt(state.rental && state.rental.days) || 1;
+    return dailyTotal * days;
+  }
+  return state.appendices.reduce((sum, a) => sum + computeAppendixTotalRub(a, config), 0);
+}
+function computeRentalDailyTotalRub(state, config) {
+  if (!state.appendices[0]) return 0;
+  return computeAppendixTotalRub(state.appendices[0], config);
+}
+
+function recalcRowLive(aIdx) {
+  const config = currentConfig();
+  document.querySelectorAll(`[data-a="${aIdx}"]`).forEach(inp => {
+    const r = parseInt(inp.dataset.r), f = inp.dataset.f;
+    if (f !== config.calcFields.total) state.appendices[aIdx].rows[r][f] = inp.value;
+  });
+  state.appendices[aIdx].rows.forEach((row, rIdx) => {
+    const total = computeRowTotal(row, config);
+    row[config.calcFields.total] = formatRuNumber(total);
+    const totalInput = document.querySelector(`[data-a="${aIdx}"][data-r="${rIdx}"][data-f="${config.calcFields.total}"]`);
+    if (totalInput) totalInput.value = formatRuNumber(total);
+  });
+  const totalDisplay = document.getElementById(`appendixTotalDisplay-${aIdx}`);
+  if (totalDisplay) totalDisplay.textContent = formatRuNumber(computeAppendixTotalRub(state.appendices[aIdx], config)) + " руб.";
+  if (state.contractType === "rental_400") recalcRentalLive();
+}
+
+function recalcRentalLive() {
+  const config = currentConfig();
+  const daysEl = document.getElementById("rentalDays");
+  const days = daysEl ? (parseInt(daysEl.value) || 1) : 1;
+  if (!state.rental) state.rental = {};
+  state.rental.days = days;
+  const dailyTotal = computeRentalDailyTotalRub(state, config);
+  const dailyDisplay = document.getElementById("rentalDailyDisplay");
+  const totalDisplay = document.getElementById("rentalTotalDisplay");
+  if (dailyDisplay) dailyDisplay.textContent = formatRuNumber(dailyTotal) + " руб.";
+  if (totalDisplay) totalDisplay.textContent = formatRuNumber(dailyTotal * days) + " руб.";
+}
+
+const STEP_TITLES = ["Тип и грант", "Стороны", "Тело договора", "Приложения", "Проверка"];
+let currentStep = 0;
+const state = { contractType: null, contractorVariant: null, grantId: "vkmp", contractNumber: "", contractDate: "", polozhenieClause: "пп. 4 п.1 раздела 2 главы IV", notEmployeeConfirmed: false, contractor: {}, selectedContractorId: null, bodyValues: {}, totalAmountRub: null, appendices: [], rental: null, vatClause: "НДС не облагается", paymentTermDays: "7", paymentTermDaysWords: "Семи" };
+
+function configKey() { return `${state.contractType}|${state.contractorVariant}`; }
+function currentConfig() { return CONTRACT_CONFIGS[configKey()]; }
+
+let currentPage = "generator"; // "generator" | "smeta" | "planning" | "settings"
+
+const PAGE_SUBTITLES = {
+  generator: "Форма создаёт .docx-договор по одному из 6 шаблонов и запускает его скачивание.",
+  smeta: "Учёт по каждому пункту сметы — с автоматической синхронизацией в Google Таблицу.",
+  planning: "Планирование расходов по субсидиям на год и по месяцам.",
+  settings: "Реквизиты заказчиков, применяемые при генерации договоров.",
+};
+
+function goToPage(page) {
+  currentPage = page;
+  renderSidebar();
+  renderStepsNav();
+  document.getElementById("pageSubtitle").textContent = PAGE_SUBTITLES[page] || "";
+  renderApp();
+  window.scrollTo(0, 0);
+}
+
+function renderSidebar() {
+  document.querySelectorAll(".nav-item").forEach(el => {
+    el.classList.toggle("active", el.dataset.page === currentPage);
+  });
+}
+
+function renderStepsNav() {
+  const nav = document.getElementById("stepsNav");
+  if (currentPage !== "generator") { nav.innerHTML = ""; return; }
+  nav.innerHTML = STEP_TITLES.map((t, i) => `<div class="dot ${i===currentStep?'active':(i<currentStep?'done':'')}">${i+1}. ${t}</div>`).join("");
+}
+function goToStep(n) { currentStep = n; renderStepsNav(); renderApp(); window.scrollTo(0,0); }
+
+function showValidationMessage(text) {
+  let msgBox = document.getElementById("validationMsg");
+  if (!msgBox) {
+    msgBox = document.createElement("div");
+    msgBox.id = "validationMsg";
+    msgBox.className = "warning-box";
+    msgBox.style.marginBottom = "12px";
+    document.getElementById("app").prepend(msgBox);
+  }
+  msgBox.textContent = "⚠️ " + text;
+}
+function clearValidationMessage() {
+  const msgBox = document.getElementById("validationMsg");
+  if (msgBox) msgBox.remove();
+}
+function validateCurrentStep() {
+  const invalids = [];
+  document.querySelectorAll("#app [required]").forEach(el => {
+    el.classList.remove("field-error");
+    const isEmpty = el.type === "checkbox" ? !el.checked : !el.value || !el.value.trim();
+    if (isEmpty) { el.classList.add("field-error"); invalids.push(el); }
+  });
+  if (invalids.length > 0) {
+    invalids[0].scrollIntoView({ behavior: "smooth", block: "center" });
+    invalids[0].focus();
+    showValidationMessage(`Заполните обязательные поля (отмечены красным) — их ${invalids.length}.`);
+    return false;
+  }
+  clearValidationMessage();
+  return true;
+}
+function emptyRow(config) { const row = {}; config.rowFields.forEach(f => { row[f.name] = f.default || ""; }); return row; }
+function ensureAppendices() {
+  const config = currentConfig(); if (!config) return;
+  while (state.appendices.length < config.appendixCount) state.appendices.push({ values: {}, totalRub: 0, rows: [emptyRow(config)] });
+  state.appendices = state.appendices.slice(0, config.appendixCount);
+}
+
+// ============================================================
+// НАСТРОЙКИ — РЕКВИЗИТЫ ЗАКАЗЧИКОВ
+// ============================================================
+const CUSTOMER_FIELD_LABELS = [
+  { name: "short_name", label: "Краткое название (для грантового блока, напр. «СПбГУПТД»)" },
+  { name: "full_name", label: "Полное название для преамбулы договора" },
+  { name: "req_full_name", label: "Полное название для таблицы реквизитов (прямые кавычки \")" },
+  { name: "req_full_name_guillemet", label: "Полное название для таблицы реквизитов (кавычки-ёлочки «»)" },
+  { name: "signatory_clause", label: "Кто подписывает (полная фраза «в лице ..., действующего на основании ...»)" },
+  { name: "address", label: "Юридический адрес" },
+  { name: "inn_kpp", label: "ИНН/КПП" },
+  { name: "bank_authority", label: "Наименование казначейства/банка" },
+  { name: "eks", label: "Единый казначейский счёт" },
+  { name: "ks", label: "Казначейский счёт" },
+  { name: "bik", label: "БИК" },
+  { name: "personal_account", label: "Лицевой счёт" },
+  { name: "signatory_position_short", label: "Должность подписанта (в блоке реквизитов)" },
+  { name: "signatory_initials", label: "Подпись — обычный порядок («И.О. Фамилия»)" },
+  { name: "signatory_initials_reversed", label: "Подпись — обратный порядок («Фамилия И.О.», для приложений)" },
+];
+
+function renderSettings() {
+  const cards = Object.keys(CUSTOMERS_DEFAULT).map(key => {
+    const customer = getCustomer(key);
+    const warning = customer._warning ? `<div class="warning-box">⚠️ ${customer._warning}</div>` : "";
+    const fieldsHtml = CUSTOMER_FIELD_LABELS.map(f => `
+      <label>${f.label}</label>
+      <input type="text" data-customer-key="${key}" data-customer-field="${f.name}" value="${(customer[f.name]||'').replace(/"/g,'&quot;')}">
+    `).join("");
+    return `<div class="card">
+      <h2>${CUSTOMERS_DEFAULT[key].label}</h2>
+      ${warning}
+      ${fieldsHtml}
+      <button class="btn btn-secondary" style="margin-top:14px;font-size:12px" data-reset-customer="${key}">Сбросить к значениям по умолчанию</button>
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="hint" style="margin-bottom:16px">Эти реквизиты подставляются в договор автоматически при выборе гранта на Шаге 1. Изменения сохраняются в этом браузере и применяются ко всем новым договорам.</div>
+  ${cards}
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" onclick="goToPage('generator')">← Вернуться к генератору</button>
+    <button class="btn btn-primary" id="saveSettingsBtn">Сохранить реквизиты</button>
+  </div>`;
+}
+
+// ============================================================
+// СТРАНИЦА «УЧЁТ ПО СМЕТЕ»
+// ============================================================
+function loadSubsidies() {
+  try {
+    const raw = window.localStorage.getItem("subsidies");
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  // Стартовый набор совпадает с грантами генератора договоров.
+  return [
+    { id: "vkmp", name: "ВКМП (Росмолодёжь)", spreadsheetId: "", projects: [] },
+    { id: "rddm_spbguptd", name: "РДДМ (СПбГУПТД)", spreadsheetId: "", projects: [{ id: "tochka", name: "ТОЧКА", sheetName: "ТОЧКА" }] },
+    { id: "rddm_npt", name: "РДДМ (НПТ)", spreadsheetId: "", projects: [{ id: "nit_kultury", name: "НИТЬ КУЛЬТУРЫ", sheetName: "НИТЬ КУЛЬТУРЫ" }] },
+  ];
+}
+function saveSubsidies(list) { window.localStorage.setItem("subsidies", JSON.stringify(list)); subsidies = list; }
+let subsidies = loadSubsidies();
+
+let smetaState = {
+  selectedSubsidyId: subsidies[0] ? subsidies[0].id : null,
+  selectedProjectId: null,
+  loadedItems: null, // массив строк, полученных из Google Таблицы
+  editingRow: null, // индекс строки, для которой открыта форма учёта
+};
+
+function findSubsidy(id) { return subsidies.find(s => s.id === id); }
+function findProject(subsidy, id) { return subsidy ? subsidy.projects.find(p => p.id === id) : null; }
+
+function renderSmetaPage() {
+  const subsidyBlocks = subsidies.map(s => {
+    const isSelected = s.id === smetaState.selectedSubsidyId;
+    const projectChips = s.projects.map(p => `<span class="project-chip ${p.id===smetaState.selectedProjectId && isSelected ?'selected':''}" data-select-project="${s.id}:${p.id}">${p.name} <span data-remove-project="${s.id}:${p.id}" style="margin-left:4px;opacity:0.6">✕</span></span>`).join("");
+    return `<div class="subsidy-block">
+      <h3>
+        <span style="cursor:pointer" data-select-subsidy="${s.id}">${isSelected?'▾':'▸'} ${s.name}</span>
+        <button class="btn-danger-text" data-remove-subsidy="${s.id}">Удалить субсидию</button>
+      </h3>
+      ${isSelected ? `
+        <label>ID Google Таблицы сметы <small class="gray">(из адреса таблицы, между /d/ и /edit)</small></label>
+        <input type="text" data-subsidy-spreadsheet="${s.id}" value="${s.spreadsheetId||''}" placeholder="1AbCdEfG...">
+        <div style="margin-top:10px">${projectChips || '<span class="hint">Проектов пока нет</span>'}</div>
+        <button class="btn btn-secondary btn-small" style="margin-top:10px" data-add-project="${s.id}">+ Добавить проект</button>
+      ` : ""}
+    </div>`;
+  }).join("");
+
+  const subsidy = findSubsidy(smetaState.selectedSubsidyId);
+  const project = findProject(subsidy, smetaState.selectedProjectId);
+
+  let loadSection = "";
+  if (project) {
+    loadSection = `
+    <div class="card">
+      <h2>Данные проекта «${project.name}»</h2>
+      <label>Адрес вашего сайта на Netlify</label>
+      <input type="text" id="smetaSiteUrl" placeholder="https://ваш-сайт.netlify.app" value="${window.localStorage.getItem('siteUrl')||''}">
+      <button class="btn btn-primary" id="loadBudgetBtn" style="margin-top:14px">Загрузить из Google Таблицы</button>
+      <div id="smetaLoadStatus" style="margin-top:10px;font-size:13px"></div>
+      ${renderBudgetTable()}
+    </div>`;
+  }
+
+  return `
+  <div class="card">
+    <h2>Субсидии и проекты</h2>
+    ${subsidyBlocks}
+    <button class="btn btn-secondary btn-small" style="margin-top:8px" id="addSubsidyBtn">+ Добавить субсидию</button>
+  </div>
+  ${loadSection}`;
+}
+
+function renderBudgetTable() {
+  if (smetaState.loadedItems === null) return `<div class="hint" style="margin-top:12px">Нажмите «Загрузить из Google Таблицы», чтобы увидеть строки сметы.</div>`;
+  if (smetaState.loadedItems.length === 0) return `<div class="hint" style="margin-top:12px">В этом листе нет строк с подрядчиком (или лист пуст).</div>`;
+
+  const rows = smetaState.loadedItems.map((item, idx) => {
+    const name = item["Наименование расходов"] || item["Наименование расходов "] || "—";
+    const contractor = item["Подрядчик"] || item["Подрядчик "] || "—";
+    const amount = item["Запрашиваемая сумма"] || item["Стоимость единицы"] || "—";
+    const isEditing = smetaState.editingRow === idx;
+    const trackingForm = isEditing ? `
+      <tr><td colspan="4" style="background:#fafafa">
+        <div class="row2">
+          <div><label>Договор — Номер</label><input type="text" id="track_contract_number_${idx}"></div>
+          <div><label>Договор — Дата</label><input type="text" id="track_contract_date_${idx}"></div>
+        </div>
+        <div class="row2">
+          <div><label>Счёт — Номер</label><input type="text" id="track_invoice_number_${idx}"></div>
+          <div><label>Счёт — Дата</label><input type="text" id="track_invoice_date_${idx}"></div>
+        </div>
+        <div class="row2">
+          <div><label>УПД/акт — Номер</label><input type="text" id="track_act_number_${idx}"></div>
+          <div><label>УПД/акт — Дата</label><input type="text" id="track_act_date_${idx}"></div>
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary btn-small" data-save-tracking="${idx}">Сохранить в Таблицу</button>
+          <button class="btn btn-secondary btn-small" data-cancel-tracking="${idx}">Отмена</button>
+        </div>
+        <div id="trackStatus_${idx}" style="margin-top:8px;font-size:12px"></div>
+      </td></tr>` : "";
+    return `<tr>
+      <td>${name}</td>
+      <td>${contractor}</td>
+      <td>${amount}</td>
+      <td><button class="btn-secondary btn-small" data-edit-tracking="${idx}">Обновить учёт</button></td>
+    </tr>${trackingForm}`;
+  }).join("");
+
+  return `<table class="budget-table"><thead><tr><th>Наименование</th><th>Подрядчик</th><th>Сумма</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function attachSmetaHandlers() {
+  document.querySelectorAll("[data-select-subsidy]").forEach(el => {
+    el.onclick = () => {
+      const id = el.dataset.selectSubsidy;
+      smetaState.selectedSubsidyId = smetaState.selectedSubsidyId === id ? null : id;
+      smetaState.selectedProjectId = null;
+      smetaState.loadedItems = null;
+      renderApp();
+    };
+  });
+  document.querySelectorAll("[data-remove-subsidy]").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (!confirm("Удалить субсидию и все её проекты из списка?")) return;
+      saveSubsidies(subsidies.filter(s => s.id !== btn.dataset.removeSubsidy));
+      renderApp();
+    };
+  });
+  document.getElementById("addSubsidyBtn").onclick = () => {
+    const name = prompt("Название субсидии:");
+    if (!name) return;
+    const id = "s_" + Date.now();
+    saveSubsidies([...subsidies, { id, name, spreadsheetId: "", projects: [] }]);
+    renderApp();
+  };
+  document.querySelectorAll("[data-subsidy-spreadsheet]").forEach(inp => {
+    inp.onchange = () => {
+      const s = findSubsidy(inp.dataset.subsidySpreadsheet);
+      if (s) { s.spreadsheetId = inp.value; saveSubsidies(subsidies); }
+    };
+  });
+  document.querySelectorAll("[data-add-project]").forEach(btn => {
+    btn.onclick = () => {
+      const name = prompt("Название проекта (для отображения):");
+      if (!name) return;
+      const sheetName = prompt("Точное название листа в Google Таблице:", name);
+      if (!sheetName) return;
+      const s = findSubsidy(btn.dataset.addProject);
+      s.projects.push({ id: "p_" + Date.now(), name, sheetName });
+      saveSubsidies(subsidies);
+      renderApp();
+    };
+  });
+  document.querySelectorAll("[data-remove-project]").forEach(el => {
+    el.onclick = (e) => {
+      e.stopPropagation();
+      const [sId, pId] = el.dataset.removeProject.split(":");
+      const s = findSubsidy(sId);
+      s.projects = s.projects.filter(p => p.id !== pId);
+      saveSubsidies(subsidies);
+      if (smetaState.selectedProjectId === pId) { smetaState.selectedProjectId = null; smetaState.loadedItems = null; }
+      renderApp();
+    };
+  });
+  document.querySelectorAll("[data-select-project]").forEach(el => {
+    el.onclick = () => {
+      const [sId, pId] = el.dataset.selectProject.split(":");
+      smetaState.selectedSubsidyId = sId;
+      smetaState.selectedProjectId = smetaState.selectedProjectId === pId ? null : pId;
+      smetaState.loadedItems = null;
+      renderApp();
+    };
+  });
+
+  const loadBtn = document.getElementById("loadBudgetBtn");
+  if (loadBtn) loadBtn.onclick = handleLoadBudget;
+
+  document.querySelectorAll("[data-edit-tracking]").forEach(btn => {
+    btn.onclick = () => { smetaState.editingRow = parseInt(btn.dataset.editTracking); renderApp(); };
+  });
+  document.querySelectorAll("[data-cancel-tracking]").forEach(btn => {
+    btn.onclick = () => { smetaState.editingRow = null; renderApp(); };
+  });
+  document.querySelectorAll("[data-save-tracking]").forEach(btn => {
+    btn.onclick = () => handleSaveTracking(parseInt(btn.dataset.saveTracking));
+  });
+}
+
+async function handleLoadBudget() {
+  const subsidy = findSubsidy(smetaState.selectedSubsidyId);
+  const project = findProject(subsidy, smetaState.selectedProjectId);
+  const siteUrl = document.getElementById("smetaSiteUrl").value.trim().replace(/\/$/, "");
+  const statusEl = document.getElementById("smetaLoadStatus");
+  if (!siteUrl) { alert("Впишите адрес сайта на Netlify"); return; }
+  if (!subsidy.spreadsheetId) { alert("Впишите ID Google Таблицы для этой субсидии"); return; }
+  window.localStorage.setItem("siteUrl", siteUrl);
+
+  statusEl.textContent = "Загружаю...";
+  try {
+    const res = await fetch(`${siteUrl}/.netlify/functions/read-budget-sheet`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spreadsheetId: subsidy.spreadsheetId, sheetName: project.sheetName }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      smetaState.loadedItems = json.items;
+      statusEl.textContent = `✅ Загружено строк: ${json.items.length}`;
+    } else {
+      statusEl.textContent = "❌ " + (json.error || "Ошибка загрузки");
+    }
+  } catch (err) {
+    statusEl.textContent = "❌ Не удалось отправить запрос: " + err.message;
+  }
+  renderApp();
+}
+
+async function handleSaveTracking(idx) {
+  const subsidy = findSubsidy(smetaState.selectedSubsidyId);
+  const project = findProject(subsidy, smetaState.selectedProjectId);
+  const siteUrl = window.localStorage.getItem("siteUrl");
+  const item = smetaState.loadedItems[idx];
+  const statusEl = document.getElementById(`trackStatus_${idx}`);
+
+  const updates = {};
+  const cNum = document.getElementById(`track_contract_number_${idx}`).value;
+  const cDate = document.getElementById(`track_contract_date_${idx}`).value;
+  const iNum = document.getElementById(`track_invoice_number_${idx}`).value;
+  const iDate = document.getElementById(`track_invoice_date_${idx}`).value;
+  const aNum = document.getElementById(`track_act_number_${idx}`).value;
+  const aDate = document.getElementById(`track_act_date_${idx}`).value;
+  if (cNum) updates["Договор → Номер"] = cNum;
+  if (cDate) updates["Договор → Дата"] = cDate;
+  if (iNum) updates["Счёт → Номер"] = iNum;
+  if (iDate) updates["Счёт → Дата"] = iDate;
+  if (aNum) updates["УПД/ акт → Номер"] = aNum;
+  if (aDate) updates["УПД/ акт → Дата"] = aDate;
+
+  if (Object.keys(updates).length === 0) { statusEl.textContent = "Нечего сохранять — заполните хотя бы одно поле."; return; }
+
+  statusEl.textContent = "Сохраняю...";
+  try {
+    const res = await fetch(`${siteUrl}/.netlify/functions/write-budget-tracking`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spreadsheetId: subsidy.spreadsheetId, sheetName: project.sheetName, rowNumber: item._row, updates }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      const notFound = json.results.filter(r => !r.written);
+      statusEl.textContent = notFound.length
+        ? "⚠️ Часть колонок не найдена в таблице: " + notFound.map(r => r.header).join(", ")
+        : "✅ Сохранено";
+    } else {
+      statusEl.textContent = "❌ " + (json.error || "Ошибка сохранения");
+    }
+  } catch (err) {
+    statusEl.textContent = "❌ " + err.message;
+  }
+}
+
+// ============================================================
+// СТРАНИЦА «ПЛАНИРОВАНИЕ РАСХОДОВ»
+// ============================================================
+const MONTH_NAMES = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+
+function loadPlanning() {
+  try {
+    const raw = window.localStorage.getItem("planning");
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return {}; // { [subsidyId]: { [year]: { months: [12 чисел] } } }
+}
+function savePlanning(data) { window.localStorage.setItem("planning", JSON.stringify(data)); planningData = data; }
+let planningData = loadPlanning();
+
+let planningSelectedSubsidyId = subsidies[0] ? subsidies[0].id : null;
+let planningSelectedYear = new Date().getFullYear();
+
+function getPlanMonths(subsidyId, year) {
+  const bySubsidy = planningData[subsidyId] || {};
+  const byYear = bySubsidy[year] || { months: Array(12).fill(0) };
+  return byYear.months;
+}
+function setPlanMonth(subsidyId, year, monthIdx, value) {
+  if (!planningData[subsidyId]) planningData[subsidyId] = {};
+  if (!planningData[subsidyId][year]) planningData[subsidyId][year] = { months: Array(12).fill(0) };
+  planningData[subsidyId][year].months[monthIdx] = value;
+  savePlanning(planningData);
+}
+
+function renderPlanningPage() {
+  const subsidyOptions = subsidies.map(s => `<option value="${s.id}" ${s.id===planningSelectedSubsidyId?'selected':''}>${s.name}</option>`).join("");
+  const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedYear);
+  const total = months.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+
+  const monthCells = MONTH_NAMES.map((name, i) => `
+    <div class="month-cell">
+      <label>${name}</label>
+      <input type="number" data-plan-month="${i}" value="${months[i] || ''}" placeholder="0">
+    </div>
+  `).join("");
+
+  return `
+  <div class="card">
+    <h2>Планирование расходов</h2>
+    <div class="row2">
+      <div><label>Субсидия</label><select id="planningSubsidySelect">${subsidyOptions}</select></div>
+      <div><label>Год</label><input type="number" id="planningYearInput" value="${planningSelectedYear}"></div>
+    </div>
+    <h3>Кассовый план по месяцам, руб.</h3>
+    <div class="month-grid">${monthCells}</div>
+    <div style="margin-top:16px;font-size:15px;font-weight:600">Итого за год: ${formatRuNumber(total)} руб.</div>
+    <div class="hint" style="margin-top:10px">Данные хранятся в этом браузере. Экспорт кассового плана в отдельный файл (Excel/Word) по выбранной форме — следующий шаг, пока не реализован.</div>
+  </div>`;
+}
+
+function attachPlanningHandlers() {
+  document.getElementById("planningSubsidySelect").onchange = (e) => { planningSelectedSubsidyId = e.target.value; renderApp(); };
+  document.getElementById("planningYearInput").onchange = (e) => { planningSelectedYear = parseInt(e.target.value) || new Date().getFullYear(); renderApp(); };
+  document.querySelectorAll("[data-plan-month]").forEach(inp => {
+    inp.oninput = () => {
+      const i = parseInt(inp.dataset.planMonth);
+      setPlanMonth(planningSelectedSubsidyId, planningSelectedYear, i, parseFloat(inp.value) || 0);
+      const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedYear);
+      const total = months.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+      document.querySelector('.card h2').nextElementSibling; // no-op, keep structure simple
+      const totalEl = [...document.querySelectorAll('.card div')].find(d => d.textContent.includes('Итого за год'));
+      if (totalEl) totalEl.textContent = `Итого за год: ${formatRuNumber(total)} руб.`;
+    };
+  });
+}
+
+function renderApp() {
+  const app = document.getElementById("app");
+  if (currentPage === "settings") { app.innerHTML = renderSettings(); attachSettingsHandlers(); return; }
+  if (currentPage === "smeta") { app.innerHTML = renderSmetaPage(); attachSmetaHandlers(); return; }
+  if (currentPage === "planning") { app.innerHTML = renderPlanningPage(); attachPlanningHandlers(); return; }
+  if (currentStep === 0) app.innerHTML = renderStep1();
+  else if (currentStep === 1) app.innerHTML = renderStep2();
+  else if (currentStep === 2) app.innerHTML = renderStep3();
+  else if (currentStep === 3) app.innerHTML = renderStep4();
+  else if (currentStep === 4) app.innerHTML = renderStep5();
+  attachHandlers();
+}
+
+function renderStep1() {
+  const typeOptions = [
+    { type: "services_200", variant: "ip", label: "Услуги — ИП" },
+    { type: "services_200", variant: "ip_ads", label: "Услуги (реклама) — ИП" },
+    { type: "services_200", variant: "samozanyaty", label: "Услуги — Самозанятый" },
+    { type: "supply_300", variant: "ip", label: "Поставка — ИП" },
+    { type: "supply_300", variant: "ooo", label: "Поставка — ООО" },
+    { type: "rental_400", variant: "ip", label: "Аренда — ИП" },
+  ];
+  const grantWarning = state.grantId && GRANTS[state.grantId]._warning ? `<div class="warning-box">⚠️ ${GRANTS[state.grantId]._warning}</div>` : "";
+  return `<div class="card"><h2>Шаг 1 — Тип договора и грант</h2>
+  <label class="required">Тип договора и контрагента</label>
+  <div class="radio-group" id="typeOptions">${typeOptions.map(o => `<div class="radio-option ${state.contractType===o.type && state.contractorVariant===o.variant?'selected':''}" data-type="${o.type}" data-variant="${o.variant}">${o.label}</div>`).join("")}</div>
+  <label class="required">Грант</label>
+  <select id="grantSelect">${Object.keys(GRANTS).map(id => `<option value="${id}" ${state.grantId===id?'selected':''}>${GRANTS[id].label}</option>`).join("")}</select>
+  <div class="hint">Заказчик подставляется автоматически в зависимости от выбранного гранта. Реквизиты заказчиков можно посмотреть и изменить в разделе «⚙ Реквизиты заказчиков» вверху страницы.</div>
+  ${grantWarning}</div>
+  <div class="nav-buttons"><div></div><button class="btn btn-primary" id="nextBtn" ${!state.contractType?'disabled':''}>Далее →</button></div>`;
+}
+
+function renderStep2() {
+  const variant = state.contractorVariant;
+  const fields = CONTRACTOR_FIELD_SETS[variant] || [];
+  const registryFiltered = CONTRACTORS_REGISTRY.filter(c => c.type === variant);
+  const registryHtml = registryFiltered.length ? `<h3>Выбрать из справочника</h3>${registryFiltered.map(c => `<div class="contractor-card ${state.selectedContractorId===c.id?'selected':''}" data-contractor-id="${c.id}">${c.short_name}</div>`).join("")}<div class="hint">Или заполните поля вручную ниже.</div>` : `<div class="hint">Справочник для этого типа пуст — заполните поля вручную.</div>`;
+  const fieldsHtml = fields.map(f => `<label class="required">${f.label}</label><input type="text" required data-contractor-field="${f.name}" value="${state.contractor[f.name] || ''}">`).join("");
+  return `<div class="card"><h2>Шаг 2 — Стороны (${CONTRACT_CONFIGS[configKey()].roleLabels.contractor})</h2>
+  ${registryHtml}<h3>Реквизиты</h3>${fieldsHtml}
+  <div class="checkbox-row"><input type="checkbox" id="notEmployeeCheck" ${state.notEmployeeConfirmed?'checked':''}><label for="notEmployeeCheck" class="required">Подтверждаю: контрагент не является сотрудником/студентом СПбГУПТД</label></div>
+  </div><div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><button class="btn btn-primary" id="nextBtn">Далее →</button></div>`;
+}
+
+function renderStep3() {
+  const config = currentConfig();
+  const bodyHtml = config.bodyFields.map(f => `<label class="required">${BODY_FIELD_LABELS[f]||f}</label><input type="text" required data-body-field="${f}" value="${state.bodyValues[f]||''}">`).join("");
+  return `<div class="card"><h2>Шаг 3 — Тело договора</h2>
+  <div class="row2"><div><label class="required">Номер договора</label><input type="text" required id="contractNumber" value="${state.contractNumber}" placeholder="напр. РОСМОЛ-08-2026"></div><div><label class="required">Дата договора</label><input type="text" required id="contractDate" value="${state.contractDate}" placeholder="напр. 10.08.2026"></div></div>
+  <label>Пункт Положения о закупке</label><input type="text" id="polozhenieClause" value="${state.polozhenieClause}">
+  <h3>Предмет и сроки</h3>${bodyHtml}
+  <h3>Оплата</h3><label>НДС</label><input type="text" id="vatClause" value="${state.vatClause}"><div class="hint">Сумма договора считается автоматически из строк таблиц на следующем шаге.</div>
+  </div><div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><button class="btn btn-primary" id="nextBtn">Далее →</button></div>`;
+}
+
+function renderStep4() {
+  ensureAppendices();
+  const config = currentConfig();
+  const isRental = state.contractType === "rental_400";
+  const appendixBlocks = state.appendices.map((appendix, aIdx) => {
+    const fieldsHtml = config.appendixFields.map(f => `<label class="required">${APPENDIX_FIELD_LABELS[f]||f}</label><input type="text" required data-appendix-idx="${aIdx}" data-appendix-field="${f}" value="${appendix.values[f]||''}">`).join("");
+    const rowsHtml = appendix.rows.map((row, rIdx) => `<tr>${config.rowFields.map(f => {
+      const isTotalField = f.name === config.calcFields.total;
+      const isCalcInput = f.name === config.calcFields.qty || f.name === config.calcFields.price;
+      const calcAttr = isCalcInput ? `data-calc-row="${aIdx}"` : "";
+      const requiredAttr = isCalcInput ? "required" : "";
+      const readonly = isTotalField ? "readonly style=\"background:#f5f5f5;color:#555\"" : "";
+      return `<td><input type="text" ${readonly} ${requiredAttr} data-a="${aIdx}" data-r="${rIdx}" data-f="${f.name}" ${calcAttr} value="${row[f.name]||''}"></td>`;
+    }).join("")}<td><button class="btn-danger-text" data-remove-row="${aIdx}:${rIdx}">✕</button></td></tr>`).join("");
+    const totalLabel = isRental ? "" : `<label>Итог приложения, руб. <small class="gray">(считается автоматически)</small></label><div id="appendixTotalDisplay-${aIdx}" style="font-weight:600;font-size:15px;padding:6px 0">${formatRuNumber(computeAppendixTotalRub(appendix, config))} руб.</div>`;
+    return `<div class="appendix-block"><h4>Приложение ${aIdx+1}</h4>${fieldsHtml}<table class="row-table"><thead><tr>${config.rowFields.map(f=>`<th>${f.label}</th>`).join("")}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table><button class="btn btn-secondary" style="margin-top:8px;font-size:12px;padding:6px 12px" data-add-row="${aIdx}">+ Добавить строку</button>${totalLabel}</div>`;
+  }).join("");
+
+  const rentalBlock = isRental ? `<div class="card"><h3>Итоги по аренде</h3>
+    <label class="required">Количество дней аренды</label>
+    <input type="number" id="rentalDays" value="${state.rental?.days || 1}" min="1" style="max-width:140px">
+    <div class="row2" style="margin-top:14px">
+      <div><label>Стоимость за 1 сутки <small class="gray">(авто)</small></label><div id="rentalDailyDisplay" style="font-weight:600;padding:6px 0">${formatRuNumber(computeRentalDailyTotalRub(state, config))} руб.</div></div>
+      <div><label>ИТОГО за весь срок <small class="gray">(авто)</small></label><div id="rentalTotalDisplay" style="font-weight:600;padding:6px 0">${formatRuNumber(computeContractTotalRub(state, config))} руб.</div></div>
+    </div></div>` : "";
+
+  return `<div class="card"><h2>Шаг 4 — Приложения (${config.appendixCount})</h2><div class="hint">Сумма строки = количество × цена, считается автоматически. Просто впишите количество и цену.</div>${appendixBlocks}</div>${rentalBlock}
+  <div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><button class="btn btn-primary" id="nextBtn">Далее →</button></div>`;
+}
+
+function renderStep5() {
+  const config = currentConfig();
+  const grant = GRANTS[state.grantId];
+  let payload = null, buildError = null;
+  try { payload = buildPayload(state, config, grant); } catch (e) { buildError = e.message; }
+  const rows = [["Тип договора",config.label],["Грант",grant.label],["Номер / дата",`${state.contractNumber} от ${state.contractDate}`],["Контрагент",state.contractor.contractor_full_name||"—"],["Сумма (авто)",formatRuNumber(computeContractTotalRub(state, config))+" руб."],["Приложений",config.appendixCount]];
+  return `<div class="card"><h2>Шаг 5 — Проверка и генерация</h2>
+  <table class="review-table">${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("")}</table>
+  ${buildError?`<div class="warning-box">⚠️ ${buildError}</div>`:""}
+  <h3>Адрес сайта на Netlify</h3><input type="text" id="siteUrl" placeholder="https://ваш-сайт.netlify.app" value="${window.localStorage.getItem('siteUrl')||''}">
+  <div style="margin-top:18px"><button class="btn btn-primary" id="generateBtn" ${buildError?'disabled':''}>Сгенерировать и скачать договор</button></div>
+  <div id="resultBox"></div></div>
+  <div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><div></div></div>`;
+}
+
+function attachHandlers() {
+  const backBtn = document.getElementById("backBtn"); if (backBtn) backBtn.onclick = () => goToStep(currentStep-1);
+  const nextBtn = document.getElementById("nextBtn"); if (nextBtn) nextBtn.onclick = () => { if (!validateCurrentStep()) return; saveCurrentStep(); goToStep(currentStep+1); };
+  if (currentStep === 0) {
+    document.querySelectorAll("#typeOptions .radio-option").forEach(el => { el.onclick = () => { state.contractType = el.dataset.type; state.contractorVariant = el.dataset.variant; state.appendices = []; renderApp(); }; });
+    document.getElementById("grantSelect").onchange = (e) => { state.grantId = e.target.value; };
+  }
+  if (currentStep === 1) {
+    document.querySelectorAll(".contractor-card").forEach(el => { el.onclick = () => { const c = CONTRACTORS_REGISTRY.find(x => x.id === el.dataset.contractorId); state.selectedContractorId = c.id; state.contractor = { ...c }; delete state.contractor.id; delete state.contractor.type; delete state.contractor.short_name; renderApp(); }; });
+  }
+  if (currentStep === 3) {
+    document.querySelectorAll("[data-add-row]").forEach(btn => { btn.onclick = () => { const aIdx = parseInt(btn.dataset.addRow); state.appendices[aIdx].rows.push(emptyRow(currentConfig())); renderApp(); }; });
+    document.querySelectorAll("[data-remove-row]").forEach(btn => { btn.onclick = () => { const [aIdx, rIdx] = btn.dataset.removeRow.split(":").map(Number); if (state.appendices[aIdx].rows.length > 1) state.appendices[aIdx].rows.splice(rIdx, 1); renderApp(); }; });
+    document.querySelectorAll("[data-calc-row]").forEach(inp => { inp.oninput = () => recalcRowLive(parseInt(inp.dataset.calcRow)); });
+    const rentalDaysEl = document.getElementById("rentalDays");
+    if (rentalDaysEl) rentalDaysEl.oninput = recalcRentalLive;
+  }
+  if (currentStep === 4) { const genBtn = document.getElementById("generateBtn"); if (genBtn) genBtn.onclick = handleGenerate; }
+}
+
+function saveCurrentStep() {
+  if (currentStep === 1) {
+    document.querySelectorAll("[data-contractor-field]").forEach(inp => { state.contractor[inp.dataset.contractorField] = inp.value; });
+    state.notEmployeeConfirmed = document.getElementById("notEmployeeCheck").checked;
+  }
+  if (currentStep === 2) {
+    state.contractNumber = document.getElementById("contractNumber").value;
+    state.contractDate = document.getElementById("contractDate").value;
+    state.polozhenieClause = document.getElementById("polozhenieClause").value;
+    document.querySelectorAll("[data-body-field]").forEach(inp => { state.bodyValues[inp.dataset.bodyField] = inp.value; });
+    state.vatClause = document.getElementById("vatClause").value;
+  }
+  if (currentStep === 3) {
+    document.querySelectorAll("[data-appendix-idx]").forEach(inp => { const aIdx = parseInt(inp.dataset.appendixIdx); state.appendices[aIdx].values[inp.dataset.appendixField] = inp.value; });
+    document.querySelectorAll("[data-a]").forEach(inp => { const a = parseInt(inp.dataset.a), r = parseInt(inp.dataset.r), f = inp.dataset.f; state.appendices[a].rows[r][f] = inp.value; });
+    if (state.contractType === "rental_400") {
+      const daysEl = document.getElementById("rentalDays");
+      state.rental = { startDate: state.bodyValues.rental_start_date, endDate: state.bodyValues.rental_end_date, days: daysEl ? (parseInt(daysEl.value) || 1) : 1 };
+    }
+  }
+}
+
+async function handleGenerate() {
+  const siteUrl = document.getElementById("siteUrl").value.trim().replace(/\/$/, "");
+  const resultBox = document.getElementById("resultBox");
+  const btn = document.getElementById("generateBtn");
+  if (!siteUrl) { alert("Впишите адрес сайта на Netlify"); return; }
+  window.localStorage.setItem("siteUrl", siteUrl);
+  const config = currentConfig(); const grant = GRANTS[state.grantId];
+  let payload;
+  try { payload = buildPayload(state, config, grant); } catch (e) { resultBox.style.display = "block"; resultBox.className = "error"; resultBox.textContent = "❌ " + e.message; return; }
+  btn.disabled = true; btn.textContent = "Генерирую..."; resultBox.style.display = "none";
+  try {
+    const res = await fetch(`${siteUrl}/.netlify/functions/generate-contract`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    resultBox.style.display = "block";
+    if (res.ok) {
+      const blob = await res.blob(); const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = payload.fileName;
+      document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+      resultBox.className = "success";
+      resultBox.textContent = "✅ Готово! Файл " + payload.fileName + " должен был начать скачиваться.\n\nПроверьте папку «Загрузки» и вручную перенесите файл в нужную папку на Google Диске.";
+    } else {
+      const text = await res.text();
+      resultBox.className = "error"; resultBox.textContent = "❌ ОШИБКА\n\nHTTP статус: " + res.status + "\n\n" + text;
+    }
+  } catch (err) {
+    resultBox.style.display = "block"; resultBox.className = "error"; resultBox.textContent = "❌ Не удалось отправить запрос.\n\n" + err.message;
+  } finally { btn.disabled = false; btn.textContent = "Сгенерировать и скачать договор"; }
+}
+
+document.querySelectorAll(".nav-item").forEach(el => {
+  el.onclick = () => goToPage(el.dataset.page);
+});
+document.getElementById("pageSubtitle").textContent = PAGE_SUBTITLES.generator;
+renderSidebar();
+renderStepsNav();
+renderApp();
+document.getElementById("app").addEventListener("input", (e) => {
+  if (e.target.classList && e.target.classList.contains("field-error")) {
+    const filled = e.target.type === "checkbox" ? e.target.checked : (e.target.value && e.target.value.trim());
+    if (filled) e.target.classList.remove("field-error");
+  }
+});
+</script>
+</body>
+</html>
