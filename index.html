@@ -12,7 +12,9 @@
 <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.69.3/build/docxtemplater.js"></script>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: "Montserrat", -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: #1a1a1a; background: #fafafa; display: flex; min-height: 100vh; }
+  body { font-family: "Montserrat", -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: #1a1a1a; background: #fafafa; min-height: 100vh; }
+  #appContainer { display: flex; min-height: 100vh; }
+  .nav-item[id="logoutNavItem"] { position: sticky; top: 100vh; cursor: pointer; }
   .sidebar { width: 220px; flex-shrink: 0; background: #1e1315; color: #e8dcdd; padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
   .sidebar h1 { font-size: 15px; padding: 0 20px 16px; margin: 0; border-bottom: 1px solid #334155; }
   .nav-item { display: block; padding: 12px 20px; cursor: pointer; font-size: 14px; color: #cbd5e1; border-left: 3px solid transparent; }
@@ -80,18 +82,23 @@
 </head>
 <body>
 
+<div id="loginScreen" style="display:none; max-width: 420px; margin: 80px auto; padding: 0 20px;"></div>
+
+<div id="appContainer" style="display:none">
 <div class="sidebar">
   <h1>WorkSpace</h1>
   <div class="nav-item" data-page="generator">📄 Генератор договоров</div>
   <div class="nav-item" data-page="smeta">📊 Учёт по смете</div>
   <div class="nav-item" data-page="planning">💰 Планирование расходов</div>
   <div class="nav-item settings" data-page="settings">⚙ Настройки</div>
+  <div class="nav-item" id="logoutNavItem" style="margin-top:auto;color:#f0aaaa">⎋ Выйти</div>
 </div>
 
 <div class="main">
   <div class="subtitle" id="pageSubtitle"></div>
   <div class="steps-nav" id="stepsNav"></div>
   <div id="app"></div>
+</div>
 </div>
 
 <script>
@@ -451,6 +458,46 @@ function renderSettings() {
     <div class="hint" style="margin-bottom:16px">Вставьте ссылку на Google Таблицу сметы для каждой субсидии — список проектов (листов таблицы) подтянется автоматически.</div>
     ${subsidyCards}
     <button class="btn btn-secondary btn-small" style="margin-top:8px" id="addSubsidyBtn">+ Добавить субсидию</button>
+  </div>
+  ${currentUser && currentUser.role === "admin" ? renderUserManagementCard() : ""}`;
+}
+
+function renderUserManagementCard() {
+  const subsidyCheckboxes = subsidies.map(s => `
+    <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin-top:6px">
+      <input type="checkbox" data-new-user-subsidy="${s.id}" style="width:auto"> ${s.name}
+    </label>`).join("");
+  const pageCheckboxes = [
+    ["generator", "📄 Генератор договоров"], ["smeta", "📊 Учёт по смете"],
+    ["planning", "💰 Планирование расходов"], ["settings", "⚙ Настройки"],
+  ].map(([key, label]) => `
+    <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin-top:6px">
+      <input type="checkbox" data-new-user-page="${key}" style="width:auto"> ${label}
+    </label>`).join("");
+
+  return `
+  <div class="card" style="margin-top:24px">
+    <h2>Пользователи</h2>
+    <div class="hint" style="margin-bottom:16px">Ссылка на таблицу пользователей: та же, что вы указали при входе. Новый пользователь сможет войти с этим логином и паролем сразу после создания.</div>
+    <div class="row2">
+      <div><label class="required">Логин</label><input type="text" id="newUserUsername"></div>
+      <div><label class="required">Пароль</label><input type="text" id="newUserPassword" placeholder="Придумайте и сообщите коллеге"></div>
+    </div>
+    <label style="margin-top:14px">Роль</label>
+    <select id="newUserRole">
+      <option value="user">Обычный пользователь (ограниченный доступ)</option>
+      <option value="admin">Администратор (полный доступ)</option>
+    </select>
+    <div id="newUserPermissionsBlock">
+      <h3>Доступные субсидии</h3>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:normal"><input type="checkbox" id="newUserAllSubsidies" style="width:auto" checked> Все субсидии</label>
+      <div id="newUserSubsidyList" style="display:none;margin-top:6px">${subsidyCheckboxes}</div>
+      <h3>Доступные разделы</h3>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:normal"><input type="checkbox" id="newUserAllPages" style="width:auto" checked> Все разделы</label>
+      <div id="newUserPageList" style="display:none;margin-top:6px">${pageCheckboxes}</div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:16px" id="createUserBtn">Создать пользователя</button>
+    <div id="createUserStatus" style="margin-top:10px;font-size:13px"></div>
   </div>`;
 }
 
@@ -526,6 +573,52 @@ function attachSettingsHandlers() {
       renderApp();
     };
   });
+
+  // --- Управление пользователями (только для admin) ---
+  const allSubsEl = document.getElementById("newUserAllSubsidies");
+  const allPagesEl = document.getElementById("newUserAllPages");
+  if (allSubsEl) allSubsEl.onchange = () => { document.getElementById("newUserSubsidyList").style.display = allSubsEl.checked ? "none" : "block"; };
+  if (allPagesEl) allPagesEl.onchange = () => { document.getElementById("newUserPageList").style.display = allPagesEl.checked ? "none" : "block"; };
+  const createUserBtn = document.getElementById("createUserBtn");
+  if (createUserBtn) createUserBtn.onclick = handleCreateUser;
+}
+
+async function handleCreateUser() {
+  const statusEl = document.getElementById("createUserStatus");
+  const username = document.getElementById("newUserUsername").value.trim();
+  const password = document.getElementById("newUserPassword").value;
+  const role = document.getElementById("newUserRole").value;
+  if (!username || !password) { statusEl.textContent = "⚠️ Впишите логин и пароль."; return; }
+
+  let allowedSubsidies = "all";
+  if (!document.getElementById("newUserAllSubsidies").checked) {
+    const checked = [...document.querySelectorAll("[data-new-user-subsidy]:checked")].map(el => el.dataset.newUserSubsidy);
+    allowedSubsidies = checked.join(",") || "all";
+  }
+  let allowedPages = "all";
+  if (!document.getElementById("newUserAllPages").checked) {
+    const checked = [...document.querySelectorAll("[data-new-user-page]:checked")].map(el => el.dataset.newUserPage);
+    allowedPages = checked.join(",") || "all";
+  }
+
+  const adminToken = window.sessionStorage.getItem("authToken");
+  statusEl.textContent = "Создаю...";
+  try {
+    const res = await fetch(`${window.location.origin}/.netlify/functions/auth-create-user`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminToken, usersSpreadsheetUrlOrId: usersSpreadsheetUrl, newUsername: username, newPassword: password, role, allowedSubsidies, allowedPages }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      statusEl.textContent = "✅ Пользователь создан. Сообщите коллеге логин и пароль.";
+      document.getElementById("newUserUsername").value = "";
+      document.getElementById("newUserPassword").value = "";
+    } else {
+      statusEl.textContent = "❌ " + (json.error || "Ошибка создания пользователя");
+    }
+  } catch (err) {
+    statusEl.textContent = "❌ " + err.message;
+  }
 }
 
 async function handleDiscoverProjects(subsidyId) {
@@ -588,7 +681,7 @@ function findSubsidy(id) { return subsidies.find(s => s.id === id); }
 function findProject(subsidy, id) { return subsidy ? subsidy.projects.find(p => p.id === id) : null; }
 
 function renderSmetaPage() {
-  const subsidyChips = subsidies.map(s => `<span class="project-chip ${s.id===smetaState.selectedSubsidyId?'selected':''}" data-select-subsidy="${s.id}">${s.name}</span>`).join("");
+  const subsidyChips = visibleSubsidiesForUser().map(s => `<span class="project-chip ${s.id===smetaState.selectedSubsidyId?'selected':''}" data-select-subsidy="${s.id}">${s.name}</span>`).join("");
 
   const subsidy = findSubsidy(smetaState.selectedSubsidyId);
   const projectChips = subsidy ? (subsidy.projects.length
@@ -876,7 +969,7 @@ function setPlanMonths(subsidyId, projectId, year, months) {
 }
 
 function renderPlanningPage() {
-  const subsidyOptions = subsidies.map(s => `<option value="${s.id}" ${s.id===planningSelectedSubsidyId?'selected':''}>${s.name}</option>`).join("");
+  const subsidyOptions = visibleSubsidiesForUser().map(s => `<option value="${s.id}" ${s.id===planningSelectedSubsidyId?'selected':''}>${s.name}</option>`).join("");
   const subsidy = findSubsidy(planningSelectedSubsidyId);
   if (subsidy && !planningSelectedProjectId && subsidy.projects[0]) planningSelectedProjectId = subsidy.projects[0].id;
   const projectOptions = subsidy ? subsidy.projects.map(p => `<option value="${p.id}" ${p.id===planningSelectedProjectId?'selected':''}>${p.name}</option>`).join("") : "";
@@ -1122,7 +1215,8 @@ function renderStep1() {
   <label class="required">Тип договора и контрагента</label>
   <div class="radio-group" id="typeOptions">${typeOptions.map(o => `<div class="radio-option ${state.contractType===o.type && state.contractorVariant===o.variant?'selected':''}" data-type="${o.type}" data-variant="${o.variant}">${o.label}</div>`).join("")}</div>
   <label class="required">Грант</label>
-  <select id="grantSelect">${Object.keys(GRANTS).map(id => `<option value="${id}" ${state.grantId===id?'selected':''}>${GRANTS[id].label}</option>`).join("")}</select>
+  <select id="grantSelect">${Object.keys(GRANTS).filter(subsidyAllowedForUser).map(id => `<option value="${id}" ${state.grantId===id?'selected':''}>${GRANTS[id].label}</option>`).join("")}</select>
+  ${Object.keys(GRANTS).filter(subsidyAllowedForUser).length === 0 ? '<div class="warning-box">⚠️ У вас нет доступа ни к одному гранту.</div>' : ''}
   <div class="hint">Заказчик подставляется автоматически в зависимости от выбранного гранта. Реквизиты заказчиков можно посмотреть и изменить в разделе «⚙ Настройки» вверху страницы.</div>
   ${grantWarning}</div>
   <div class="nav-buttons"><div></div><button class="btn btn-primary" id="nextBtn" ${!state.contractType?'disabled':''}>Далее →</button></div>`;
@@ -1263,19 +1357,180 @@ async function handleGenerate() {
   } finally { btn.disabled = false; btn.textContent = "Сгенерировать и скачать договор"; }
 }
 
-document.querySelectorAll(".nav-item").forEach(el => {
+document.querySelectorAll(".nav-item[data-page]").forEach(el => {
   el.onclick = () => goToPage(el.dataset.page);
 });
-document.getElementById("pageSubtitle").textContent = PAGE_SUBTITLES.generator;
-renderSidebar();
-renderStepsNav();
-renderApp();
 document.getElementById("app").addEventListener("input", (e) => {
   if (e.target.classList && e.target.classList.contains("field-error")) {
     const filled = e.target.type === "checkbox" ? e.target.checked : (e.target.value && e.target.value.trim());
     if (filled) e.target.classList.remove("field-error");
   }
 });
+
+// ============================================================
+// ВХОД И СЕССИЯ
+// ============================================================
+let currentUser = null; // { username, role, allowedSubsidies, allowedPages }
+let usersSpreadsheetUrl = window.localStorage.getItem("usersSpreadsheetUrl") || "";
+
+function pageAllowed(page) {
+  if (!currentUser) return false;
+  if (currentUser.allowedPages === "all") return true;
+  return currentUser.allowedPages.split(",").map(s => s.trim()).includes(page);
+}
+function subsidyAllowedForUser(subsidyId) {
+  if (!currentUser) return false;
+  if (currentUser.allowedSubsidies === "all") return true;
+  return currentUser.allowedSubsidies.split(",").map(s => s.trim()).includes(subsidyId);
+}
+function visibleSubsidiesForUser() {
+  return subsidies.filter(s => subsidyAllowedForUser(s.id));
+}
+
+function decodeTokenClientSide(token) {
+  // Клиент не может ПРОВЕРИТЬ подпись без секрета (он и не должен это уметь) -
+  // но может прочитать payload, чтобы понять срок действия и права для UI.
+  // Настоящая проверка подписи происходит на сервере при каждом запросе входа.
+  try {
+    const [bodyB64] = token.split(".");
+    const body = JSON.parse(atob(bodyB64.replace(/-/g, "+").replace(/_/g, "/")));
+    if (!body.exp || Date.now() > body.exp) return null;
+    return body;
+  } catch (e) {
+    return null;
+  }
+}
+
+function checkSession() {
+  const token = window.sessionStorage.getItem("authToken");
+  if (!token) return false;
+  const decoded = decodeTokenClientSide(token);
+  if (!decoded) { window.sessionStorage.removeItem("authToken"); return false; }
+  currentUser = decoded;
+  return true;
+}
+
+function renderLoginScreen() {
+  const loginEl = document.getElementById("loginScreen");
+  document.getElementById("appContainer").style.display = "none";
+  loginEl.style.display = "block";
+
+  if (!usersSpreadsheetUrl) {
+    loginEl.innerHTML = `
+      <div class="card">
+        <h2>Первоначальная настройка</h2>
+        <p class="hint">Укажите ссылку на Google Таблицу со списком пользователей (лист "Пользователи"). Это нужно один раз для этого браузера.</p>
+        <label>Ссылка на таблицу пользователей</label>
+        <input type="text" id="setupUsersSheetInput" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
+        <button class="btn btn-primary" style="margin-top:14px" id="setupSaveBtn">Сохранить</button>
+      </div>`;
+    document.getElementById("setupSaveBtn").onclick = () => {
+      const val = document.getElementById("setupUsersSheetInput").value.trim();
+      if (!val) return;
+      usersSpreadsheetUrl = val;
+      window.localStorage.setItem("usersSpreadsheetUrl", val);
+      renderLoginScreen();
+    };
+    return;
+  }
+
+  loginEl.innerHTML = `
+    <div class="card">
+      <h2>Вход в WorkSpace</h2>
+      <label>Логин</label>
+      <input type="text" id="loginUsername">
+      <label>Пароль</label>
+      <input type="password" id="loginPassword">
+      <button class="btn btn-primary" style="margin-top:14px;width:100%" id="loginSubmitBtn">Войти</button>
+      <div id="loginStatus" style="margin-top:10px;font-size:13px"></div>
+      <div class="hint" style="margin-top:14px;cursor:pointer;text-decoration:underline" id="changeUsersSheetLink">Изменить таблицу пользователей</div>
+    </div>`;
+
+  document.getElementById("loginSubmitBtn").onclick = handleLogin;
+  document.getElementById("loginPassword").onkeydown = (e) => { if (e.key === "Enter") handleLogin(); };
+  document.getElementById("changeUsersSheetLink").onclick = () => {
+    usersSpreadsheetUrl = "";
+    window.localStorage.removeItem("usersSpreadsheetUrl");
+    renderLoginScreen();
+  };
+}
+
+async function handleLogin() {
+  const username = document.getElementById("loginUsername").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const statusEl = document.getElementById("loginStatus");
+  if (!username || !password) { statusEl.textContent = "Впишите логин и пароль."; return; }
+
+  statusEl.textContent = "Проверяю...";
+  try {
+    const res = await fetch(`${window.location.origin}/.netlify/functions/auth-login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, usersSpreadsheetUrlOrId: usersSpreadsheetUrl }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      window.sessionStorage.setItem("authToken", json.token);
+      currentUser = json.user;
+      showApp();
+    } else {
+      statusEl.textContent = "❌ " + (json.error || "Ошибка входа");
+    }
+  } catch (err) {
+    statusEl.textContent = "❌ Не удалось отправить запрос: " + err.message;
+  }
+}
+
+function handleLogout() {
+  window.sessionStorage.removeItem("authToken");
+  currentUser = null;
+  renderLoginScreen();
+}
+
+function showApp() {
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("appContainer").style.display = "flex";
+
+  // Скрываем в меню разделы, недоступные текущему пользователю; если
+  // текущая страница вдруг недоступна - переключаемся на первую доступную.
+  document.querySelectorAll(".nav-item[data-page]").forEach(el => {
+    const allowed = pageAllowed(el.dataset.page);
+    el.style.display = allowed ? "" : "none";
+  });
+  if (!pageAllowed(currentPage)) {
+    const firstAllowed = ["generator", "smeta", "planning", "settings"].find(pageAllowed);
+    currentPage = firstAllowed || "generator";
+  }
+
+  // На момент первой инициализации smetaState/planningSelectedSubsidyId
+  // currentUser ещё не был известен, поэтому дефолтная субсидия могла
+  // выбраться без учёта прав - пересчитываем её здесь, когда права уже известны.
+  const visible = visibleSubsidiesForUser();
+  if (!visible.some(s => s.id === smetaState.selectedSubsidyId)) {
+    smetaState.selectedSubsidyId = visible[0] ? visible[0].id : null;
+    smetaState.selectedProjectId = null;
+  }
+  if (!visible.some(s => s.id === planningSelectedSubsidyId)) {
+    planningSelectedSubsidyId = visible[0] ? visible[0].id : null;
+    planningSelectedProjectId = null;
+  }
+  if (!subsidyAllowedForUser(state.grantId)) {
+    const firstAllowedGrant = Object.keys(GRANTS).find(subsidyAllowedForUser);
+    if (firstAllowedGrant) state.grantId = firstAllowedGrant;
+  }
+
+  document.getElementById("logoutNavItem").onclick = handleLogout;
+  document.getElementById("pageSubtitle").textContent = PAGE_SUBTITLES[currentPage] || PAGE_SUBTITLES.generator;
+  renderSidebar();
+  renderStepsNav();
+  renderApp();
+}
+
+if (checkSession()) {
+  showApp();
+} else {
+  renderLoginScreen();
+}
+
 </script>
 </body>
 </html>
