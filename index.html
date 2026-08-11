@@ -3,21 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Генератор договоров</title>
+<title>WorkSpace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: #1a1a1a; background: #fafafa; display: flex; min-height: 100vh; }
-  .sidebar { width: 220px; flex-shrink: 0; background: #1e293b; color: #e2e8f0; padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  body { font-family: "Montserrat", -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: #1a1a1a; background: #fafafa; display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; flex-shrink: 0; background: #1e1315; color: #e8dcdd; padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
   .sidebar h1 { font-size: 15px; padding: 0 20px 16px; margin: 0; border-bottom: 1px solid #334155; }
   .nav-item { display: block; padding: 12px 20px; cursor: pointer; font-size: 14px; color: #cbd5e1; border-left: 3px solid transparent; }
-  .nav-item:hover { background: #273548; }
-  .nav-item.active { background: #273548; color: white; border-left-color: #2563eb; font-weight: 600; }
+  .nav-item:hover { background: #2e1c1f; }
+  .nav-item.active { background: #2e1c1f; color: white; border-left-color: #dc2626; font-weight: 600; }
   .nav-item.settings { margin-top: 20px; border-top: 1px solid #334155; padding-top: 16px; font-size: 13px; color: #94a3b8; }
   .main { flex: 1; padding: 24px 28px 80px; max-width: 960px; }
   .subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
   .steps-nav { display: flex; gap: 4px; margin-bottom: 28px; flex-wrap: wrap; }
   .steps-nav .dot { flex: 1; min-width: 60px; text-align: center; padding: 8px 4px; border-radius: 6px; font-size: 12px; background: #e5e5e5; color: #888; cursor: default; }
-  .steps-nav .dot.active { background: #2563eb; color: white; font-weight: 600; }
+  .steps-nav .dot.active { background: #dc2626; color: white; font-weight: 600; }
   .steps-nav .dot.done { background: #d1fae5; color: #047857; }
   .card { background: white; border: 1px solid #e5e5e5; border-radius: 10px; padding: 24px; margin-bottom: 16px; }
   h2 { font-size: 17px; margin-top: 0; margin-bottom: 18px; }
@@ -30,17 +33,17 @@
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .radio-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
   .radio-option { border: 1px solid #ccc; border-radius: 8px; padding: 10px 14px; cursor: pointer; font-size: 13px; user-select: none; }
-  .radio-option.selected { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+  .radio-option.selected { border-color: #dc2626; background: #fef2f2; color: #b91c1c; font-weight: 600; }
   .btn { padding: 11px 22px; font-size: 14px; font-weight: 600; border: none; border-radius: 7px; cursor: pointer; }
-  .btn-primary { background: #2563eb; color: white; }
-  .btn-primary:disabled { background: #aac0f0; cursor: not-allowed; }
+  .btn-primary { background: #dc2626; color: white; }
+  .btn-primary:disabled { background: #f0aaaa; cursor: not-allowed; }
   .btn-secondary { background: #f0f0f0; color: #333; }
   .btn-small { padding: 6px 12px; font-size: 12px; }
   .btn-danger-text { background: none; color: #dc2626; font-size: 13px; padding: 4px 8px; border: none; cursor: pointer; }
   .nav-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
   .contractor-card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; font-size: 13px; }
-  .contractor-card:hover { border-color: #2563eb; }
-  .contractor-card.selected { border-color: #2563eb; background: #eff6ff; }
+  .contractor-card:hover { border-color: #dc2626; }
+  .contractor-card.selected { border-color: #dc2626; background: #fef2f2; }
   table.row-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
   table.row-table th, table.row-table td { border: 1px solid #ddd; padding: 6px; text-align: left; }
   table.row-table th { background: #f5f5f5; font-weight: 600; }
@@ -61,7 +64,7 @@
   .subsidy-block { border: 1px solid #ddd; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
   .subsidy-block h3 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; }
   .project-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #ccc; border-radius: 16px; padding: 5px 12px; font-size: 12px; margin: 4px 6px 4px 0; cursor: pointer; }
-  .project-chip.selected { background: #2563eb; color: white; border-color: #2563eb; }
+  .project-chip.selected { background: #dc2626; color: white; border-color: #dc2626; }
   .budget-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
   .budget-table th, .budget-table td { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: left; vertical-align: top; }
   .budget-table th { background: #f5f5f5; }
@@ -74,7 +77,7 @@
 <body>
 
 <div class="sidebar">
-  <h1>Контрактный отдел</h1>
+  <h1>WorkSpace</h1>
   <div class="nav-item" data-page="generator">📄 Генератор договоров</div>
   <div class="nav-item" data-page="smeta">📊 Учёт по смете</div>
   <div class="nav-item" data-page="planning">💰 Планирование расходов</div>
@@ -411,13 +414,115 @@ function renderSettings() {
     </div>`;
   }).join("");
 
+  const subsidyCards = subsidies.map(s => {
+    const projectChips = s.projects.map(p => `<span class="project-chip">${p.name}</span>`).join("");
+    return `<div class="subsidy-block">
+      <h3>
+        ${s.name}
+        <button class="btn-danger-text" data-remove-subsidy="${s.id}">Удалить субсидию</button>
+      </h3>
+      <label>Ссылка на Google Таблицу сметы</label>
+      <input type="text" data-subsidy-sheet-url="${s.id}" value="${s.spreadsheetUrl||''}" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
+      <button class="btn btn-secondary btn-small" style="margin-top:10px" data-discover-projects="${s.id}">Обновить список проектов из таблицы</button>
+      <div id="discoverStatus_${s.id}" style="margin-top:8px;font-size:12px"></div>
+      <div style="margin-top:10px">${projectChips || '<span class="hint">Проекты появятся здесь после нажатия кнопки выше.</span>'}</div>
+    </div>`;
+  }).join("");
+
   return `
   <div class="hint" style="margin-bottom:16px">Эти реквизиты подставляются в договор автоматически при выборе гранта на Шаге 1. Изменения сохраняются в этом браузере и применяются ко всем новым договорам.</div>
   ${cards}
   <div class="nav-buttons">
     <button class="btn btn-secondary" onclick="goToPage('generator')">← Вернуться к генератору</button>
     <button class="btn btn-primary" id="saveSettingsBtn">Сохранить реквизиты</button>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h2>Субсидии и таблицы сметы</h2>
+    <div class="hint" style="margin-bottom:16px">Вставьте ссылку на Google Таблицу сметы для каждой субсидии — список проектов (листов таблицы) подтянется автоматически.</div>
+    ${subsidyCards}
+    <button class="btn btn-secondary btn-small" style="margin-top:8px" id="addSubsidyBtn">+ Добавить субсидию</button>
   </div>`;
+}
+
+function extractSpreadsheetId(urlOrId) {
+  if (!urlOrId) return "";
+  const match = urlOrId.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : urlOrId.trim();
+}
+
+function attachSettingsHandlers() {
+  document.querySelectorAll("[data-reset-customer]").forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.resetCustomer;
+      delete customerOverrides[key];
+      saveCustomerOverrides(customerOverrides);
+      renderApp();
+    };
+  });
+  const saveBtn = document.getElementById("saveSettingsBtn");
+  if (saveBtn) saveBtn.onclick = () => {
+    document.querySelectorAll("[data-customer-key]").forEach(inp => {
+      const key = inp.dataset.customerKey, field = inp.dataset.customerField;
+      if (!customerOverrides[key]) customerOverrides[key] = {};
+      customerOverrides[key][field] = inp.value;
+    });
+    saveCustomerOverrides(customerOverrides);
+    saveBtn.textContent = "Сохранено ✓";
+    setTimeout(() => { saveBtn.textContent = "Сохранить реквизиты"; }, 1500);
+  };
+
+  document.getElementById("addSubsidyBtn").onclick = () => {
+    const name = prompt("Название субсидии:");
+    if (!name) return;
+    const id = "s_" + Date.now();
+    saveSubsidies([...subsidies, { id, name, spreadsheetUrl: "", projects: [] }]);
+    renderApp();
+  };
+  document.querySelectorAll("[data-remove-subsidy]").forEach(btn => {
+    btn.onclick = () => {
+      if (!confirm("Удалить субсидию и все её проекты из списка?")) return;
+      saveSubsidies(subsidies.filter(s => s.id !== btn.dataset.removeSubsidy));
+      renderApp();
+    };
+  });
+  document.querySelectorAll("[data-subsidy-sheet-url]").forEach(inp => {
+    inp.onchange = () => {
+      const s = findSubsidy(inp.dataset.subsidySheetUrl);
+      if (s) { s.spreadsheetUrl = inp.value; saveSubsidies(subsidies); }
+    };
+  });
+  document.querySelectorAll("[data-discover-projects]").forEach(btn => {
+    btn.onclick = () => handleDiscoverProjects(btn.dataset.discoverProjects);
+  });
+}
+
+async function handleDiscoverProjects(subsidyId) {
+  const s = findSubsidy(subsidyId);
+  const statusEl = document.getElementById(`discoverStatus_${subsidyId}`);
+  if (!s.spreadsheetUrl) { statusEl.textContent = "⚠️ Сначала вставьте ссылку на таблицу."; return; }
+
+  statusEl.textContent = "Ищу листы в таблице...";
+  try {
+    const res = await fetch(`${window.location.origin}/.netlify/functions/list-sheet-tabs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spreadsheetUrlOrId: s.spreadsheetUrl }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      s.projects = json.tabs.map(tabName => {
+        const existing = s.projects.find(p => p.sheetName === tabName);
+        return existing || { id: "p_" + tabName.replace(/\s+/g, "_") + "_" + Date.now(), name: tabName, sheetName: tabName };
+      });
+      saveSubsidies(subsidies);
+      statusEl.textContent = `✅ Найдено листов: ${json.tabs.length} (${json.tabs.join(", ")})`;
+      renderApp();
+    } else {
+      statusEl.textContent = "❌ " + (json.error || "Ошибка");
+    }
+  } catch (err) {
+    statusEl.textContent = "❌ " + err.message;
+  }
 }
 
 // ============================================================
@@ -430,9 +535,9 @@ function loadSubsidies() {
   } catch (e) {}
   // Стартовый набор совпадает с грантами генератора договоров.
   return [
-    { id: "vkmp", name: "ВКМП (Росмолодёжь)", spreadsheetId: "", projects: [] },
-    { id: "rddm_spbguptd", name: "РДДМ (СПбГУПТД)", spreadsheetId: "", projects: [{ id: "tochka", name: "ТОЧКА", sheetName: "ТОЧКА" }] },
-    { id: "rddm_npt", name: "РДДМ (НПТ)", spreadsheetId: "", projects: [{ id: "nit_kultury", name: "НИТЬ КУЛЬТУРЫ", sheetName: "НИТЬ КУЛЬТУРЫ" }] },
+    { id: "vkmp", name: "ВКМП (Росмолодёжь)", spreadsheetUrl: "", projects: [] },
+    { id: "rddm_spbguptd", name: "РДДМ (СПбГУПТД)", spreadsheetUrl: "", projects: [{ id: "tochka", name: "ТОЧКА", sheetName: "ТОЧКА" }] },
+    { id: "rddm_npt", name: "РДДМ (НПТ)", spreadsheetUrl: "", projects: [{ id: "nit_kultury", name: "НИТЬ КУЛЬТУРЫ", sheetName: "НИТЬ КУЛЬТУРЫ" }] },
   ];
 }
 function saveSubsidies(list) { window.localStorage.setItem("subsidies", JSON.stringify(list)); subsidies = list; }
@@ -449,24 +554,13 @@ function findSubsidy(id) { return subsidies.find(s => s.id === id); }
 function findProject(subsidy, id) { return subsidy ? subsidy.projects.find(p => p.id === id) : null; }
 
 function renderSmetaPage() {
-  const subsidyBlocks = subsidies.map(s => {
-    const isSelected = s.id === smetaState.selectedSubsidyId;
-    const projectChips = s.projects.map(p => `<span class="project-chip ${p.id===smetaState.selectedProjectId && isSelected ?'selected':''}" data-select-project="${s.id}:${p.id}">${p.name} <span data-remove-project="${s.id}:${p.id}" style="margin-left:4px;opacity:0.6">✕</span></span>`).join("");
-    return `<div class="subsidy-block">
-      <h3>
-        <span style="cursor:pointer" data-select-subsidy="${s.id}">${isSelected?'▾':'▸'} ${s.name}</span>
-        <button class="btn-danger-text" data-remove-subsidy="${s.id}">Удалить субсидию</button>
-      </h3>
-      ${isSelected ? `
-        <label>ID Google Таблицы сметы <small class="gray">(из адреса таблицы, между /d/ и /edit)</small></label>
-        <input type="text" data-subsidy-spreadsheet="${s.id}" value="${s.spreadsheetId||''}" placeholder="1AbCdEfG...">
-        <div style="margin-top:10px">${projectChips || '<span class="hint">Проектов пока нет</span>'}</div>
-        <button class="btn btn-secondary btn-small" style="margin-top:10px" data-add-project="${s.id}">+ Добавить проект</button>
-      ` : ""}
-    </div>`;
-  }).join("");
+  const subsidyChips = subsidies.map(s => `<span class="project-chip ${s.id===smetaState.selectedSubsidyId?'selected':''}" data-select-subsidy="${s.id}">${s.name}</span>`).join("");
 
   const subsidy = findSubsidy(smetaState.selectedSubsidyId);
+  const projectChips = subsidy ? (subsidy.projects.length
+    ? subsidy.projects.map(p => `<span class="project-chip ${p.id===smetaState.selectedProjectId?'selected':''}" data-select-project="${p.id}">${p.name}</span>`).join("")
+    : `<div class="hint">У этой субсидии пока нет проектов — добавьте ссылку на Google Таблицу в разделе ⚙ Реквизиты и таблицы, проекты подтянутся автоматически.</div>`) : "";
+
   const project = findProject(subsidy, smetaState.selectedProjectId);
 
   let loadSection = "";
@@ -474,9 +568,7 @@ function renderSmetaPage() {
     loadSection = `
     <div class="card">
       <h2>Данные проекта «${project.name}»</h2>
-      <label>Адрес вашего сайта на Netlify</label>
-      <input type="text" id="smetaSiteUrl" placeholder="https://ваш-сайт.netlify.app" value="${window.localStorage.getItem('siteUrl')||''}">
-      <button class="btn btn-primary" id="loadBudgetBtn" style="margin-top:14px">Загрузить из Google Таблицы</button>
+      <button class="btn btn-primary" id="loadBudgetBtn">Загрузить из Google Таблицы</button>
       <div id="smetaLoadStatus" style="margin-top:10px;font-size:13px"></div>
       ${renderBudgetTable()}
     </div>`;
@@ -484,9 +576,9 @@ function renderSmetaPage() {
 
   return `
   <div class="card">
-    <h2>Субсидии и проекты</h2>
-    ${subsidyBlocks}
-    <button class="btn btn-secondary btn-small" style="margin-top:8px" id="addSubsidyBtn">+ Добавить субсидию</button>
+    <h2>Субсидия</h2>
+    <div>${subsidyChips || '<span class="hint">Субсидий пока нет — добавьте в разделе ⚙ Реквизиты и таблицы.</span>'}</div>
+    ${subsidy ? `<h3 style="margin-top:20px">Проект</h3><div>${projectChips}</div>` : ""}
   </div>
   ${loadSection}`;
 }
@@ -495,13 +587,14 @@ function renderBudgetTable() {
   if (smetaState.loadedItems === null) return `<div class="hint" style="margin-top:12px">Нажмите «Загрузить из Google Таблицы», чтобы увидеть строки сметы.</div>`;
   if (smetaState.loadedItems.length === 0) return `<div class="hint" style="margin-top:12px">В этом листе нет строк с подрядчиком (или лист пуст).</div>`;
 
+  // Показываем ВСЕ колонки, которые реально есть в загруженных строках
+  // (кроме служебных полей, начинающихся с "_" — они не из таблицы).
+  const columns = Object.keys(smetaState.loadedItems[0]).filter(k => !k.startsWith("_"));
+
   const rows = smetaState.loadedItems.map((item, idx) => {
-    const name = item["Наименование расходов"] || item["Наименование расходов "] || "—";
-    const contractor = item["Подрядчик"] || item["Подрядчик "] || "—";
-    const amount = item["Запрашиваемая сумма"] || item["Стоимость единицы"] || "—";
     const isEditing = smetaState.editingRow === idx;
     const trackingForm = isEditing ? `
-      <tr><td colspan="4" style="background:#fafafa">
+      <tr><td colspan="${columns.length + 1}" style="background:#fafafa">
         <div class="row2">
           <div><label>Договор — Номер</label><input type="text" id="track_contract_number_${idx}"></div>
           <div><label>Договор — Дата</label><input type="text" id="track_contract_date_${idx}"></div>
@@ -521,14 +614,12 @@ function renderBudgetTable() {
         <div id="trackStatus_${idx}" style="margin-top:8px;font-size:12px"></div>
       </td></tr>` : "";
     return `<tr>
-      <td>${name}</td>
-      <td>${contractor}</td>
-      <td>${amount}</td>
-      <td><button class="btn-secondary btn-small" data-edit-tracking="${idx}">Обновить учёт</button></td>
+      ${columns.map(c => `<td>${item[c] || "—"}</td>`).join("")}
+      <td><button class="btn btn-primary btn-small" data-edit-tracking="${idx}">Обновить учёт</button></td>
     </tr>${trackingForm}`;
   }).join("");
 
-  return `<table class="budget-table"><thead><tr><th>Наименование</th><th>Подрядчик</th><th>Сумма</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<div style="overflow-x:auto"><table class="budget-table"><thead><tr>${columns.map(c=>`<th>${c}</th>`).join("")}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function attachSmetaHandlers() {
@@ -541,54 +632,9 @@ function attachSmetaHandlers() {
       renderApp();
     };
   });
-  document.querySelectorAll("[data-remove-subsidy]").forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      if (!confirm("Удалить субсидию и все её проекты из списка?")) return;
-      saveSubsidies(subsidies.filter(s => s.id !== btn.dataset.removeSubsidy));
-      renderApp();
-    };
-  });
-  document.getElementById("addSubsidyBtn").onclick = () => {
-    const name = prompt("Название субсидии:");
-    if (!name) return;
-    const id = "s_" + Date.now();
-    saveSubsidies([...subsidies, { id, name, spreadsheetId: "", projects: [] }]);
-    renderApp();
-  };
-  document.querySelectorAll("[data-subsidy-spreadsheet]").forEach(inp => {
-    inp.onchange = () => {
-      const s = findSubsidy(inp.dataset.subsidySpreadsheet);
-      if (s) { s.spreadsheetId = inp.value; saveSubsidies(subsidies); }
-    };
-  });
-  document.querySelectorAll("[data-add-project]").forEach(btn => {
-    btn.onclick = () => {
-      const name = prompt("Название проекта (для отображения):");
-      if (!name) return;
-      const sheetName = prompt("Точное название листа в Google Таблице:", name);
-      if (!sheetName) return;
-      const s = findSubsidy(btn.dataset.addProject);
-      s.projects.push({ id: "p_" + Date.now(), name, sheetName });
-      saveSubsidies(subsidies);
-      renderApp();
-    };
-  });
-  document.querySelectorAll("[data-remove-project]").forEach(el => {
-    el.onclick = (e) => {
-      e.stopPropagation();
-      const [sId, pId] = el.dataset.removeProject.split(":");
-      const s = findSubsidy(sId);
-      s.projects = s.projects.filter(p => p.id !== pId);
-      saveSubsidies(subsidies);
-      if (smetaState.selectedProjectId === pId) { smetaState.selectedProjectId = null; smetaState.loadedItems = null; }
-      renderApp();
-    };
-  });
   document.querySelectorAll("[data-select-project]").forEach(el => {
     el.onclick = () => {
-      const [sId, pId] = el.dataset.selectProject.split(":");
-      smetaState.selectedSubsidyId = sId;
+      const pId = el.dataset.selectProject;
       smetaState.selectedProjectId = smetaState.selectedProjectId === pId ? null : pId;
       smetaState.loadedItems = null;
       renderApp();
@@ -612,17 +658,15 @@ function attachSmetaHandlers() {
 async function handleLoadBudget() {
   const subsidy = findSubsidy(smetaState.selectedSubsidyId);
   const project = findProject(subsidy, smetaState.selectedProjectId);
-  const siteUrl = document.getElementById("smetaSiteUrl").value.trim().replace(/\/$/, "");
+  const siteUrl = window.location.origin;
   const statusEl = document.getElementById("smetaLoadStatus");
-  if (!siteUrl) { alert("Впишите адрес сайта на Netlify"); return; }
-  if (!subsidy.spreadsheetId) { alert("Впишите ID Google Таблицы для этой субсидии"); return; }
-  window.localStorage.setItem("siteUrl", siteUrl);
+  if (!subsidy.spreadsheetUrl) { alert("Сначала укажите ссылку на Google Таблицу для этой субсидии в разделе ⚙ Реквизиты заказчиков"); return; }
 
   statusEl.textContent = "Загружаю...";
   try {
     const res = await fetch(`${siteUrl}/.netlify/functions/read-budget-sheet`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spreadsheetId: subsidy.spreadsheetId, sheetName: project.sheetName }),
+      body: JSON.stringify({ spreadsheetId: extractSpreadsheetId(subsidy.spreadsheetUrl), sheetName: project.sheetName }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
@@ -640,7 +684,7 @@ async function handleLoadBudget() {
 async function handleSaveTracking(idx) {
   const subsidy = findSubsidy(smetaState.selectedSubsidyId);
   const project = findProject(subsidy, smetaState.selectedProjectId);
-  const siteUrl = window.localStorage.getItem("siteUrl");
+  const siteUrl = window.location.origin;
   const item = smetaState.loadedItems[idx];
   const statusEl = document.getElementById(`trackStatus_${idx}`);
 
@@ -664,7 +708,7 @@ async function handleSaveTracking(idx) {
   try {
     const res = await fetch(`${siteUrl}/.netlify/functions/write-budget-tracking`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spreadsheetId: subsidy.spreadsheetId, sheetName: project.sheetName, rowNumber: item._row, updates }),
+      body: JSON.stringify({ spreadsheetId: extractSpreadsheetId(subsidy.spreadsheetUrl), sheetName: project.sheetName, rowNumber: item._row, updates }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
@@ -847,7 +891,6 @@ function renderStep5() {
   return `<div class="card"><h2>Шаг 5 — Проверка и генерация</h2>
   <table class="review-table">${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("")}</table>
   ${buildError?`<div class="warning-box">⚠️ ${buildError}</div>`:""}
-  <h3>Адрес сайта на Netlify</h3><input type="text" id="siteUrl" placeholder="https://ваш-сайт.netlify.app" value="${window.localStorage.getItem('siteUrl')||''}">
   <div style="margin-top:18px"><button class="btn btn-primary" id="generateBtn" ${buildError?'disabled':''}>Сгенерировать и скачать договор</button></div>
   <div id="resultBox"></div></div>
   <div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><div></div></div>`;
@@ -896,11 +939,9 @@ function saveCurrentStep() {
 }
 
 async function handleGenerate() {
-  const siteUrl = document.getElementById("siteUrl").value.trim().replace(/\/$/, "");
+  const siteUrl = window.location.origin;
   const resultBox = document.getElementById("resultBox");
   const btn = document.getElementById("generateBtn");
-  if (!siteUrl) { alert("Впишите адрес сайта на Netlify"); return; }
-  window.localStorage.setItem("siteUrl", siteUrl);
   const config = currentConfig(); const grant = GRANTS[state.grantId];
   let payload;
   try { payload = buildPayload(state, config, grant); } catch (e) { resultBox.style.display = "block"; resultBox.className = "error"; resultBox.textContent = "❌ " + e.message; return; }
