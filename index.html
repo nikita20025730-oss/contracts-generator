@@ -10,6 +10,10 @@
 <!-- Для выгрузки заявки на казначейское обеспечение в Word прямо в браузере -->
 <script src="https://cdn.jsdelivr.net/npm/pizzip@3.2.0/dist/pizzip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.69.3/build/docxtemplater.js"></script>
+<!-- Firebase (вход и хранение задач/планирования) -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: "Montserrat", -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: #1a1a1a; background: #fafafa; min-height: 100vh; }
@@ -87,9 +91,11 @@
 <div id="appContainer" style="display:none">
 <div class="sidebar">
   <h1>WorkSpace</h1>
+  <div class="nav-item" data-page="dashboard">📋 Дашборд</div>
   <div class="nav-item" data-page="generator">📄 Генератор договоров</div>
   <div class="nav-item" data-page="smeta">📊 Учёт по смете</div>
   <div class="nav-item" data-page="planning">💰 Планирование расходов</div>
+  <div class="nav-item" data-page="documents">📑 Документы</div>
   <div class="nav-item settings" data-page="settings">⚙ Настройки</div>
   <div class="nav-item" id="logoutNavItem" style="margin-top:auto;color:#f0aaaa">⎋ Выйти</div>
 </div>
@@ -180,13 +186,13 @@ const CONTRACTOR_FIELD_SETS = {
 };
 
 const CONTRACTORS_REGISTRY = [
-  {id:"shmelev",type:"ip",short_name:"ИП Шмелев П.В.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ШМЕЛЕВ ПАВЕЛ ВЛАДИМИРОВИЧ",contractor_ogrnip:"318784700021981",contractor_ogrn_date:"26.01.2018",contractor_address:"196105, САНКТ-ПЕТЕРБУРГ, УЛ. БЛАГОДАТНАЯ Д. 16, КВ. 1",contractor_inn:"781015941806",contractor_bank_account:"40802810970010083493",contractor_bank_name:"МОСКОВСКИЙ ФИЛИАЛ АО КБ «МОДУЛЬБАНК»",contractor_corr_account:"30101810645250000092",contractor_bik:"044525092",contractor_signatory_initials:"П.В. Шмелев"},
-  {id:"lenshina",type:"samozanyaty",short_name:"Самозанятая Леньшина А.П.",contractor_full_name:"Леньшина Арина Павловна",contractor_passport_number:"4021 896174",contractor_passport_issued_by:"ГУ МВД России по г. Санкт-Петербургу и Ленинградской области",contractor_passport_issued_date:"07.07.2021",contractor_address:"ВЛАДИМИРСКАЯ ОБЛ, Г. ВЛАДИМИР, УЛ. ДОБРОСЕЛЬСКАЯ, Д. 173, КВ. 13",contractor_inn:"332903616352",contractor_bank_account:"40817810600115159881",contractor_bank_name:"АО «ТБанк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.П. Леньшина"},
-  {id:"minenkova",type:"ip",short_name:"ИП Миненкова В.Ю.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МИНЕНКОВА ВИКТОРИЯ ЮРЬЕВНА",contractor_ogrnip:"325784700253862",contractor_ogrn_date:"06.08.2025",contractor_address:"196084, Г. САНКТ-ПЕТЕРБУРГ, ПАРФЕНОВСКАЯ УЛ. Д. 14, К.1, СТР.1, КВ.958",contractor_inn:"781661467406",contractor_bank_account:"40802810320000824409",contractor_bank_name:"ООО «Банк Точка»",contractor_corr_account:"30101810745374525104",contractor_bik:"044525104",contractor_signatory_initials:"В.Ю. Миненкова"},
-  {id:"mokin",type:"ip",short_name:"ИП Мокин Д.К.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МОКИН ДЕНИС КОНСТАНТИНОВИЧ",contractor_ogrnip:"310784706100302",contractor_ogrn_date:"02.03.2010",contractor_address:"193079, САНКТ-ПЕТЕРБУРГ Г, ОКТЯБРЬСКАЯ НАБ., ДОМ № 64, КОРПУС 1, КВАРТИРА 171",contractor_inn:"781136771450",contractor_bank_account:"40802810400190060820",contractor_bank_name:"Филиал «Корпоративный» ПАО «Совкомбанк»",contractor_corr_account:"30101810445250000360",contractor_bik:"044525360",contractor_signatory_initials:"Д.К. Мокин"},
-  {id:"abika",type:"ooo",short_name:"ООО «АБИКА»",contractor_full_name:'ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "АБИКА"',contractor_short_name:"АБИКА",contractor_signatory_position:"Директора",contractor_signatory_full_name:"Елисеева Алексея Леонидовича",contractor_kpp:"784001001",contractor_ogrn:"1157847335953",contractor_address:"191002, САНКТ-ПЕТЕРБУРГ, УЛ. РАЗЪЕЗЖАЯ 26-28Б, ПОМ. 5Н",contractor_inn:"7816286653",contractor_bank_account:"40702810470110000662",contractor_bank_name:"МОСКОВСКИЙ ФИЛИАЛ",contractor_bank_name_cont:'АО КБ "МОДУЛЬБАНК" Г.МОСКВА',contractor_corr_account:"30101810645250000092",contractor_bik:"044525092",contractor_signatory_initials:"А.Л. Елисеев"},
-  {id:"murin",type:"ip",short_name:"ИП Мурин И.В. (аренда)",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МУРИН ИГОРЬ ВАСИЛЬЕВИЧ",contractor_ogrnip:"317784700103542",contractor_ogrn_date:"07.04.2017",contractor_address:"191024, Г. САНКТ-ПЕТЕРБУРГ, УЛ. ХЕРСОНСКАЯ, Д. 10, КВ.51",contractor_inn:"782512361910",contractor_bank_account:"40802810800000121920",contractor_bank_name:"АО «Тинькофф Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"И.В. Мурин"},
-  {id:"faul",type:"ip",short_name:"ИП Фауль А.М.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ФАУЛЬ АРИНА МАКСИМОВНА",contractor_ogrnip:"325784700132267",contractor_ogrn_date:"22.04.2025",contractor_address:"195112, РОССИЯ, Г САНКТ-ПЕТЕРБУРГ, ПР-КТ ЗАНЕВСКИЙ, Д 20, А, КВ 6",contractor_inn:"220917649066",contractor_bank_account:"40802810700008206484",contractor_bank_name:"АО «Т Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.М. Фауль"},
+  {id:"shmelev",type:"ip",short_name:"ИП Шмелев П.В.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ШМЕЛЕВ ПАВЕЛ ВЛАДИМИРОВИЧ",contractor_ogrnip:"318784700021981",contractor_ogrn_date:"26.01.2018",contractor_address:"196105, САНКТ-ПЕТЕРБУРГ, УЛ. БЛАГОДАТНАЯ Д. 16, КВ. 1",contractor_inn:"781015941806",contractor_bank_account:"40802810970010083493",contractor_bank_name:"МОСКОВСКИЙ ФИЛИАЛ АО КБ «МОДУЛЬБАНК»",contractor_corr_account:"30101810645250000092",contractor_bik:"044525092",contractor_signatory_initials:"П.В. Шмелев",document_signature_name:"ИП Шмелев Павел Владимирович"},
+  {id:"lenshina",type:"samozanyaty",short_name:"Самозанятая Леньшина А.П.",contractor_full_name:"Леньшина Арина Павловна",contractor_passport_number:"4021 896174",contractor_passport_issued_by:"ГУ МВД России по г. Санкт-Петербургу и Ленинградской области",contractor_passport_issued_date:"07.07.2021",contractor_address:"ВЛАДИМИРСКАЯ ОБЛ, Г. ВЛАДИМИР, УЛ. ДОБРОСЕЛЬСКАЯ, Д. 173, КВ. 13",contractor_inn:"332903616352",contractor_bank_account:"40817810600115159881",contractor_bank_name:"АО «ТБанк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.П. Леньшина",document_signature_name:"Леньшина Арина Павловна"},
+  {id:"minenkova",type:"ip",short_name:"ИП Миненкова В.Ю.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МИНЕНКОВА ВИКТОРИЯ ЮРЬЕВНА",contractor_ogrnip:"325784700253862",contractor_ogrn_date:"06.08.2025",contractor_address:"196084, Г. САНКТ-ПЕТЕРБУРГ, ПАРФЕНОВСКАЯ УЛ. Д. 14, К.1, СТР.1, КВ.958",contractor_inn:"781661467406",contractor_bank_account:"40802810320000824409",contractor_bank_name:"ООО «Банк Точка»",contractor_corr_account:"30101810745374525104",contractor_bik:"044525104",contractor_signatory_initials:"В.Ю. Миненкова",document_signature_name:"ИП Миненкова Виктория Юрьевна"},
+  {id:"mokin",type:"ip",short_name:"ИП Мокин Д.К.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МОКИН ДЕНИС КОНСТАНТИНОВИЧ",contractor_ogrnip:"310784706100302",contractor_ogrn_date:"02.03.2010",contractor_address:"193079, САНКТ-ПЕТЕРБУРГ Г, ОКТЯБРЬСКАЯ НАБ., ДОМ № 64, КОРПУС 1, КВАРТИРА 171",contractor_inn:"781136771450",contractor_bank_account:"40802810400190060820",contractor_bank_name:"Филиал «Корпоративный» ПАО «Совкомбанк»",contractor_corr_account:"30101810445250000360",contractor_bik:"044525360",contractor_signatory_initials:"Д.К. Мокин",document_signature_name:"ИП Мокин Денис Константинович"},
+  {id:"abika",type:"ooo",short_name:"ООО «АБИКА»",contractor_full_name:'ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "АБИКА"',contractor_short_name:"АБИКА",contractor_signatory_position:"Директора",contractor_signatory_full_name:"Елисеева Алексея Леонидовича",contractor_kpp:"784001001",contractor_ogrn:"1157847335953",contractor_address:"191002, САНКТ-ПЕТЕРБУРГ, УЛ. РАЗЪЕЗЖАЯ 26-28Б, ПОМ. 5Н",contractor_inn:"7816286653",contractor_bank_account:"40702810470110000662",contractor_bank_name:"МОСКОВСКИЙ ФИЛИАЛ",contractor_bank_name_cont:'АО КБ "МОДУЛЬБАНК" Г.МОСКВА',contractor_corr_account:"30101810645250000092",contractor_bik:"044525092",contractor_signatory_initials:"А.Л. Елисеев",document_signature_name:"Елисеев Алексей Леонидович"},
+  {id:"murin",type:"ip",short_name:"ИП Мурин И.В. (аренда)",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МУРИН ИГОРЬ ВАСИЛЬЕВИЧ",contractor_ogrnip:"317784700103542",contractor_ogrn_date:"07.04.2017",contractor_address:"191024, Г. САНКТ-ПЕТЕРБУРГ, УЛ. ХЕРСОНСКАЯ, Д. 10, КВ.51",contractor_inn:"782512361910",contractor_bank_account:"40802810800000121920",contractor_bank_name:"АО «Тинькофф Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"И.В. Мурин",document_signature_name:"ИП Мурин Игорь Васильевич"},
+  {id:"faul",type:"ip",short_name:"ИП Фауль А.М.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ФАУЛЬ АРИНА МАКСИМОВНА",contractor_ogrnip:"325784700132267",contractor_ogrn_date:"22.04.2025",contractor_address:"195112, РОССИЯ, Г САНКТ-ПЕТЕРБУРГ, ПР-КТ ЗАНЕВСКИЙ, Д 20, А, КВ 6",contractor_inn:"220917649066",contractor_bank_account:"40802810700008206484",contractor_bank_name:"АО «Т Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.М. Фауль",document_signature_name:"ИП Фауль Арина Максимовна"},
 ];
 
 const BODY_FIELD_LABELS = { subject_description:"Описание услуги/предмета договора (для п.1.1)", subject_description_short:"Краткое описание услуги (для списка приложений)", project_name:"Название проекта (по гранту)", total_period_start:"Начало общего периода (число)", total_period_end:"Конец общего периода (с месяцем и годом)", service_deadline:"Срок оказания услуг (дата, 'до ...')", delivery_deadline:"Срок поставки (дата)", rental_object_type:"Тип объекта аренды (напр. 'Оборудование')", project_solution_name:"Проект", rental_start_date:"Начало срока аренды", rental_end_date:"Конец срока аренды" };
@@ -319,12 +325,14 @@ const state = { contractType: null, contractorVariant: null, grantId: "vkmp", co
 function configKey() { return `${state.contractType}|${state.contractorVariant}`; }
 function currentConfig() { return CONTRACT_CONFIGS[configKey()]; }
 
-let currentPage = "generator"; // "generator" | "smeta" | "planning" | "settings"
+let currentPage = "dashboard"; // "dashboard" | "generator" | "smeta" | "planning" | "settings"
 
 const PAGE_SUBTITLES = {
+  dashboard: "Ваши задачи и списки по проектам.",
   generator: "Форма создаёт .docx-договор по одному из 6 шаблонов и запускает его скачивание.",
   smeta: "Учёт по каждому пункту сметы — с автоматической синхронизацией в Google Таблицу.",
   planning: "Планирование расходов по субсидиям на год и по месяцам.",
+  documents: "Акты, счета и заявления на оплату — генерация из тех же данных, что и договоры.",
   settings: "Реквизиты заказчиков и настройка субсидий/проектов.",
 };
 
@@ -589,6 +597,7 @@ async function handleCreateUser() {
   const password = document.getElementById("newUserPassword").value;
   const role = document.getElementById("newUserRole").value;
   if (!username || !password) { statusEl.textContent = "⚠️ Впишите логин и пароль."; return; }
+  if (password.length < 6) { statusEl.textContent = "⚠️ Пароль должен быть не короче 6 символов (требование Firebase)."; return; }
 
   let allowedSubsidies = "all";
   if (!document.getElementById("newUserAllSubsidies").checked) {
@@ -601,23 +610,28 @@ async function handleCreateUser() {
     allowedPages = checked.join(",") || "all";
   }
 
-  const adminToken = window.sessionStorage.getItem("authToken");
   statusEl.textContent = "Создаю...";
+  // Создаём пользователя через ВТОРОЙ (временный) экземпляр Firebase-приложения -
+  // иначе создание нового аккаунта автоматически переключило бы сессию
+  // браузера на этот новый аккаунт и выкинуло бы администратора из системы.
+  const secondaryApp = firebase.initializeApp(firebaseConfig, "secondary-" + Date.now());
   try {
-    const res = await fetch(`${window.location.origin}/.netlify/functions/auth-create-user`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminToken, usersSpreadsheetUrlOrId: usersSpreadsheetUrl, newUsername: username, newPassword: password, role, allowedSubsidies, allowedPages }),
+    const cred = await secondaryApp.auth().createUserWithEmailAndPassword(loginToEmail(username), password);
+    await fbDb.collection("users").doc(cred.user.uid).set({
+      username, role, allowedSubsidies, allowedPages, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    const json = await res.json();
-    if (res.ok && json.success) {
-      statusEl.textContent = "✅ Пользователь создан. Сообщите коллеге логин и пароль.";
-      document.getElementById("newUserUsername").value = "";
-      document.getElementById("newUserPassword").value = "";
-    } else {
-      statusEl.textContent = "❌ " + (json.error || "Ошибка создания пользователя");
-    }
+    await secondaryApp.auth().signOut();
+    await secondaryApp.delete();
+    statusEl.textContent = "✅ Пользователь создан. Сообщите коллеге логин и пароль.";
+    document.getElementById("newUserUsername").value = "";
+    document.getElementById("newUserPassword").value = "";
   } catch (err) {
-    statusEl.textContent = "❌ " + err.message;
+    await secondaryApp.delete();
+    if (err.code === "auth/email-already-in-use") {
+      statusEl.textContent = "❌ Пользователь с таким логином уже существует.";
+    } else {
+      statusEl.textContent = "❌ " + err.message;
+    }
   }
 }
 
@@ -938,17 +952,12 @@ const KVR_CODES = ["613", "623", "632", "812"];
 // НПТ - в строке 812. Можно поменять вручную на любой из 4 кодов.
 const KVR_DEFAULTS = { rddm_spbguptd: "613", rddm_npt: "812" };
 
-function loadPlanning() {
-  try {
-    const raw = window.localStorage.getItem("planning");
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return {}; // { [subsidyId]: { [projectId]: { [year]: { months: [{amount,day,kvr}×12] } } } }
-}
-function savePlanning(data) { window.localStorage.setItem("planning", JSON.stringify(data)); planningData = data; }
-let planningData = loadPlanning();
+// planningData[subsidyId] = { entries: [ {project,year,month,amount,day,kvr} ] } -
+// локальный кэш того, что реально загружено с сервера для этой субсидии.
+let planningData = {};
+let planningLoadedSubsidyId = null; // какая субсидия сейчас реально загружена в кэш
 
-let planningSelectedSubsidyId = subsidies[0] ? subsidies[0].id : null;
+let planningSelectedSubsidyId = null; // подставляется в showApp() по правам пользователя
 let planningSelectedProjectId = null;
 let planningSelectedYear = new Date().getFullYear();
 
@@ -956,16 +965,54 @@ function emptyPlanMonth(subsidyId) {
   return { amount: 0, day: "", kvr: KVR_DEFAULTS[subsidyId] || KVR_CODES[0] };
 }
 function getPlanMonths(subsidyId, projectId, year) {
-  const byProject = ((planningData[subsidyId] || {})[projectId] || {});
-  const byYear = byProject[year];
-  if (byYear && byYear.months) return byYear.months;
-  return Array.from({ length: 12 }, () => emptyPlanMonth(subsidyId));
+  const cache = planningData[subsidyId];
+  const project = findProject(findSubsidy(subsidyId), projectId);
+  const projectName = project ? project.name : null;
+  const months = Array.from({ length: 12 }, () => emptyPlanMonth(subsidyId));
+  if (!cache || !projectName) return months;
+  cache.entries
+    .filter(e => e.project === projectName && String(e.year) === String(year))
+    .forEach(e => {
+      const idx = MONTH_NAMES.indexOf(e.month);
+      if (idx !== -1) months[idx] = { amount: parseFloat(e.amount) || 0, day: e.day || "", kvr: e.kvr || (KVR_DEFAULTS[subsidyId] || KVR_CODES[0]) };
+    });
+  return months;
 }
-function setPlanMonths(subsidyId, projectId, year, months) {
-  if (!planningData[subsidyId]) planningData[subsidyId] = {};
-  if (!planningData[subsidyId][projectId]) planningData[subsidyId][projectId] = {};
-  planningData[subsidyId][projectId][year] = { months };
-  savePlanning(planningData);
+
+async function loadPlanningForSubsidy(subsidyId) {
+  try {
+    const snap = await fbDb.collection("planning").where("subsidyId", "==", subsidyId).get();
+    planningData[subsidyId] = { entries: snap.docs.map(d => ({ ...d.data(), _docId: d.id })) };
+  } catch (e) {
+    planningData[subsidyId] = { entries: [] };
+  }
+  planningLoadedSubsidyId = subsidyId;
+}
+
+async function savePlanMonth(subsidyId, projectId, year, monthIdx, monthData) {
+  const subsidy = findSubsidy(subsidyId);
+  const project = findProject(subsidy, projectId);
+  if (!subsidy || !project) return { success: false, error: "Не выбрана субсидия/проект." };
+
+  const month = MONTH_NAMES[monthIdx];
+  // Один документ на комбинацию субсидия+проект+год+месяц - предсказуемый ID,
+  // повторное сохранение того же месяца просто перезаписывает документ, а
+  // не плодит дубликаты.
+  const docId = `${subsidyId}_${project.name}_${year}_${month}`.replace(/[^a-zA-Zа-яА-Я0-9_]/g, "_");
+  const newEntry = { subsidyId, project: project.name, year: String(year), month, amount: monthData.amount, day: monthData.day, kvr: monthData.kvr };
+
+  // Обновляем локальный кэш сразу, чтобы интерфейс не ждал ответ сервера
+  if (!planningData[subsidyId]) planningData[subsidyId] = { entries: [] };
+  const cache = planningData[subsidyId];
+  const existingIdx = cache.entries.findIndex(e => e._docId === docId);
+  if (existingIdx !== -1) cache.entries[existingIdx] = { ...newEntry, _docId: docId }; else cache.entries.push({ ...newEntry, _docId: docId });
+
+  try {
+    await fbDb.collection("planning").doc(docId).set(newEntry);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 }
 
 function renderPlanningPage() {
@@ -973,6 +1020,10 @@ function renderPlanningPage() {
   const subsidy = findSubsidy(planningSelectedSubsidyId);
   if (subsidy && !planningSelectedProjectId && subsidy.projects[0]) planningSelectedProjectId = subsidy.projects[0].id;
   const projectOptions = subsidy ? subsidy.projects.map(p => `<option value="${p.id}" ${p.id===planningSelectedProjectId?'selected':''}>${p.name}</option>`).join("") : "";
+
+  if (planningSelectedSubsidyId && planningLoadedSubsidyId !== planningSelectedSubsidyId) {
+    return `<div class="card card-wide"><h2>Планирование расходов</h2><div class="hint">Загрузка...</div></div>`;
+  }
 
   const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
   const total = months.reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
@@ -1005,12 +1056,14 @@ function renderPlanningPage() {
   return `
   <div class="card card-wide">
     <h2>Планирование расходов</h2>
+    <div class="hint" style="margin-bottom:10px">Изменения сохраняются автоматически в Google Таблице субсидии (лист «Планирование»).</div>
     <div class="row2">
       <div><label>Субсидия</label><select id="planningSubsidySelect">${subsidyOptions}</select></div>
       <div><label>Проект</label><select id="planningProjectSelect">${projectOptions || '<option>Нет проектов</option>'}</select></div>
     </div>
     <div style="max-width:220px"><label>Год</label><input type="number" id="planningYearInput" value="${planningSelectedYear}"></div>
     <h3>Кассовый план по месяцам</h3>
+    <div id="planSaveStatus" style="font-size:12px;color:#888;min-height:16px"></div>
     <div class="month-grid">${monthCells}</div>
     <div style="margin-top:16px;font-size:15px;font-weight:600">Итого за год: ${formatRuNumber(total)} руб.</div>
     ${exportSection}
@@ -1018,23 +1071,39 @@ function renderPlanningPage() {
 }
 
 function attachPlanningHandlers() {
+  if (planningSelectedSubsidyId && planningLoadedSubsidyId !== planningSelectedSubsidyId) {
+    loadPlanningForSubsidy(planningSelectedSubsidyId).then(() => { if (currentPage === "planning") renderApp(); });
+    return;
+  }
+
   document.getElementById("planningSubsidySelect").onchange = (e) => { planningSelectedSubsidyId = e.target.value; planningSelectedProjectId = null; renderApp(); };
   const projSel = document.getElementById("planningProjectSelect");
   if (projSel) projSel.onchange = (e) => { planningSelectedProjectId = e.target.value; renderApp(); };
   document.getElementById("planningYearInput").onchange = (e) => { planningSelectedYear = parseInt(e.target.value) || new Date().getFullYear(); renderApp(); };
 
   document.querySelectorAll("[data-plan-field]").forEach(inp => {
+    // oninput - для мгновенного пересчёта "Итого" в интерфейсе
     inp.oninput = () => {
-      const [monthIdxStr, field] = inp.dataset.planField.split(":");
-      const monthIdx = parseInt(monthIdxStr);
-      const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
-      const updated = months.map((m, i) => i === monthIdx ? { ...m, [field]: field === "amount" ? (parseFloat(inp.value) || 0) : inp.value } : m);
-      setPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, updated);
-      if (field === "amount") {
-        const total = updated.reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
+      if (inp.dataset.planField.endsWith(":amount")) {
+        const monthIdx = parseInt(inp.dataset.planField.split(":")[0]);
+        const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
+        months[monthIdx] = { ...months[monthIdx], amount: parseFloat(inp.value) || 0 };
+        const total = months.reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
         const totalEl = [...document.querySelectorAll('.card div')].find(d => d.textContent.includes('Итого за год'));
         if (totalEl) totalEl.textContent = `Итого за год: ${formatRuNumber(total)} руб.`;
       }
+    };
+    // onchange (при потере фокуса) - реальное сохранение на сервер, чтобы не
+    // слать запрос на каждое нажатие клавиши.
+    inp.onchange = async () => {
+      const [monthIdxStr, field] = inp.dataset.planField.split(":");
+      const monthIdx = parseInt(monthIdxStr);
+      const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
+      const updatedMonth = { ...months[monthIdx], [field]: field === "amount" ? (parseFloat(inp.value) || 0) : inp.value };
+      const statusEl = document.getElementById("planSaveStatus");
+      if (statusEl) statusEl.textContent = "Сохраняю...";
+      const result = await savePlanMonth(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, monthIdx, updatedMonth);
+      if (statusEl) statusEl.textContent = result.success ? "✅ Сохранено" : "❌ " + (result.error || "Ошибка сохранения");
     };
   });
 
@@ -1188,8 +1257,462 @@ async function handleExportCashPlan() {
   }
 }
 
+// ============================================================
+// СТРАНИЦА «ДОКУМЕНТЫ» — Акт, Счёт, Заявление на оплату
+// ============================================================
+const DOCUMENT_TEMPLATE_MAP = { act: "Шаблон_Акт.docx", invoice: "Шаблон_Счёт.docx", payment: "Шаблон_Заявление_на_оплату.docx" };
+const PAYMENT_KBK = {
+  vkmp: { kbk: "091 0707 02 2 Ю1 65377", label: "РОСМОЛОДЕЖЬ" },
+  rddm_spbguptd: { kbk: "592 0709 02 2 Ю1 64872 613", label: "ДВИЖЕНИЕ ПЕРВЫХ" },
+};
+
+let documentsState = {
+  type: "act",
+  grantId: "vkmp",
+  contractType: "services_200",
+  selectedContractorId: null,
+  contractor: {},
+  contractNumber: "", contractDate: "", appendixNumber: "",
+  docNumber: "", docDate: "",
+  closingDocLabel: "Акт",
+  rows: [{ description: "", unit: "усл.ед.", quantity: "1", price: "" }],
+  paymentDescription: "", paymentGrounds: "", paymentAddress: "Ул. Большая Морская, 18",
+};
+
+function docRowTotal(row) { return parseRuNumber(row.quantity) * parseRuNumber(row.price); }
+function docTotalAmount() { return documentsState.rows.reduce((sum, r) => sum + docRowTotal(r), 0); }
+
+function renderDocumentsPage() {
+  const typeChips = [["act", "Акт"], ["invoice", "Счёт"], ["payment", "Заявление на оплату"]]
+    .map(([key, label]) => `<span class="project-chip ${documentsState.type===key?'selected':''}" data-doc-type="${key}">${label}</span>`).join("");
+
+  const grantOptions = Object.keys(GRANTS).filter(subsidyAllowedForUser).map(id => `<option value="${id}" ${id===documentsState.grantId?'selected':''}>${GRANTS[id].label}</option>`).join("");
+
+  let body = "";
+  if (documentsState.type === "payment") {
+    body = renderPaymentForm();
+  } else {
+    body = renderActInvoiceForm();
+  }
+
+  return `
+  <div class="card card-wide">
+    <h2>Документы</h2>
+    <label>Тип документа</label>
+    <div>${typeChips}</div>
+    <label style="margin-top:16px">Грант</label>
+    <select id="docGrantSelect" style="max-width:320px">${grantOptions}</select>
+  </div>
+  <div class="card card-wide">${body}</div>`;
+}
+
+function renderActInvoiceForm() {
+  const contractTypeOptions = [
+    ["services_200", "Услуги"], ["supply_300", "Поставка"], ["rental_400", "Аренда"],
+  ].map(([k, l]) => `<option value="${k}" ${k===documentsState.contractType?'selected':''}>${l}</option>`).join("");
+
+  const contractorChips = CONTRACTORS_REGISTRY.map(c => `<span class="project-chip ${documentsState.selectedContractorId===c.id?'selected':''}" data-doc-contractor="${c.id}">${c.short_name}</span>`).join("");
+
+  const rowsHtml = documentsState.rows.map((r, i) => `
+    <tr>
+      <td><input type="text" data-doc-row="${i}:description" value="${r.description||''}" placeholder="Описание услуги/товара"></td>
+      <td><input type="text" data-doc-row="${i}:unit" value="${r.unit||''}" style="width:80px"></td>
+      <td><input type="number" data-doc-row-calc="${i}:quantity" value="${r.quantity||''}" style="width:70px"></td>
+      <td><input type="number" data-doc-row-calc="${i}:price" value="${r.price||''}" style="width:100px"></td>
+      <td style="text-align:right;padding-right:8px">${formatRuNumber(docRowTotal(r))}</td>
+      <td><button class="btn-danger-text" data-doc-remove-row="${i}">✕</button></td>
+    </tr>`).join("");
+
+  const docLabel = documentsState.type === "act" ? "Акт" : "Счёт";
+
+  return `
+    <h3>${docLabel === "Акт" ? "Акт оказанных услуг" : "Счёт"}</h3>
+    <div class="row2">
+      <div><label class="required">Тип договора</label><select id="docContractType">${contractTypeOptions}</select></div>
+      <div></div>
+    </div>
+    <label style="margin-top:14px">Контрагент из справочника</label>
+    <div>${contractorChips}</div>
+    <div class="hint">Можно выбрать из справочника или заполнить поля вручную ниже.</div>
+    <div class="row2" style="margin-top:10px">
+      <div><label>Полное наименование (для реквизитов)</label><input type="text" id="docContractorFullName" value="${documentsState.contractor.contractor_full_name||''}"></div>
+      <div><label>ФИО для подписи (обычный регистр)</label><input type="text" id="docContractorSigName" value="${documentsState.contractor.document_signature_name||''}"></div>
+    </div>
+    <div class="row2">
+      <div><label>Адрес / место нахождения</label><input type="text" id="docContractorAddress" value="${documentsState.contractor.contractor_address||''}"></div>
+      <div><label>ИНН</label><input type="text" id="docContractorInn" value="${documentsState.contractor.contractor_inn||''}"></div>
+    </div>
+    <div class="row2">
+      <div><label>Расчётный счёт</label><input type="text" id="docContractorAccount" value="${documentsState.contractor.contractor_bank_account||''}"></div>
+      <div><label>Банк</label><input type="text" id="docContractorBankName" value="${documentsState.contractor.contractor_bank_name||''}"></div>
+    </div>
+    <div class="row2">
+      <div><label>Корр. счёт</label><input type="text" id="docContractorCorrAccount" value="${documentsState.contractor.contractor_corr_account||''}"></div>
+      <div><label>БИК</label><input type="text" id="docContractorBik" value="${documentsState.contractor.contractor_bik||''}"></div>
+    </div>
+    <div class="row2">
+      <div><label>Подпись (И.О. Фамилия)</label><input type="text" id="docContractorSigInitials" value="${documentsState.contractor.contractor_signatory_initials||''}"></div>
+    </div>
+
+    <h3>Договор и номер документа</h3>
+    <div class="row2">
+      <div><label class="required">Номер договора</label><input type="text" id="docContractNumber" value="${documentsState.contractNumber}" placeholder="напр. РОСМОЛ-08-2026"></div>
+      <div><label class="required">Дата договора</label><input type="text" id="docContractDate" value="${documentsState.contractDate}" placeholder="напр. 10.08.2026"></div>
+    </div>
+    <div class="row2">
+      <div><label>Номер приложения (если есть)</label><input type="text" id="docAppendixNumber" value="${documentsState.appendixNumber}" placeholder="напр. 1"></div>
+      <div></div>
+    </div>
+    <div class="row2">
+      <div><label class="required">Номер ${docLabel === "Акт" ? "акта" : "счёта"}</label><input type="text" id="docNumber" value="${documentsState.docNumber}"></div>
+      <div><label class="required">Дата ${docLabel === "Акт" ? "акта" : "счёта"}</label><input type="text" id="docDate" value="${documentsState.docDate}" placeholder="напр. 15 августа 2026"></div>
+    </div>
+
+    <h3>Позиции</h3>
+    <table class="row-table">
+      <thead><tr><th>Описание</th><th>Ед.</th><th>Кол-во</th><th>Цена</th><th>Сумма</th><th></th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <button class="btn btn-secondary btn-small" style="margin-top:8px" id="docAddRowBtn">+ Добавить строку</button>
+    <div style="margin-top:12px;font-weight:600">Итого: ${formatRuNumber(docTotalAmount())} руб.</div>
+
+    <div style="margin-top:20px">
+      <button class="btn btn-primary" id="docGenerateBtn">Скачать ${docLabel} (Word)</button>
+      <div id="docGenerateStatus" style="margin-top:8px;font-size:13px"></div>
+    </div>`;
+}
+
+function renderPaymentForm() {
+  const closingDocOptions = ["Акт", "Товарная накладная"].map(l => `<option ${l===documentsState.closingDocLabel?'selected':''}>${l}</option>`).join("");
+  return `
+    <h3>Заявление на оплату</h3>
+    <label class="required">Сумма к оплате, руб.</label>
+    <input type="number" id="paymentAmount" value="${documentsState.rows[0] && documentsState.rows[0].price || ''}" style="max-width:220px">
+    <label class="required">Описание услуги/товара</label>
+    <textarea id="paymentDescription">${documentsState.paymentDescription}</textarea>
+    <div class="row2">
+      <div><label class="required">Номер договора</label><input type="text" id="docContractNumber" value="${documentsState.contractNumber}"></div>
+      <div><label class="required">Дата договора</label><input type="text" id="docContractDate" value="${documentsState.contractDate}"></div>
+    </div>
+    <div class="row2">
+      <div><label>Номер приложения</label><input type="text" id="docAppendixNumber" value="${documentsState.appendixNumber}"></div>
+      <div><label>Закрывающий документ</label><select id="paymentClosingDocLabel">${closingDocOptions}</select></div>
+    </div>
+    <div class="row2">
+      <div><label class="required">Номер ${documentsState.closingDocLabel.toLowerCase()}а</label><input type="text" id="docNumber" value="${documentsState.docNumber}"></div>
+      <div><label class="required">Дата</label><input type="text" id="docDate" value="${documentsState.docDate}" placeholder="напр. 15.08.2026"></div>
+    </div>
+    <label>Адрес объекта</label>
+    <input type="text" id="paymentAddress" value="${documentsState.paymentAddress}">
+
+    <div style="margin-top:20px">
+      <button class="btn btn-primary" id="docGenerateBtn">Скачать заявление (Word)</button>
+      <div id="docGenerateStatus" style="margin-top:8px;font-size:13px"></div>
+    </div>`;
+}
+
+function attachDocumentsHandlers() {
+  document.querySelectorAll("[data-doc-type]").forEach(el => {
+    el.onclick = () => { documentsState.type = el.dataset.docType; renderApp(); };
+  });
+  document.getElementById("docGrantSelect").onchange = (e) => { documentsState.grantId = e.target.value; };
+
+  const contractTypeSel = document.getElementById("docContractType");
+  if (contractTypeSel) contractTypeSel.onchange = (e) => { documentsState.contractType = e.target.value; };
+
+  document.querySelectorAll("[data-doc-contractor]").forEach(el => {
+    el.onclick = () => {
+      const c = CONTRACTORS_REGISTRY.find(x => x.id === el.dataset.docContractor);
+      documentsState.selectedContractorId = c.id;
+      documentsState.contractor = { ...c };
+      renderApp();
+    };
+  });
+
+  // Поля контрагента - сохраняем при уходе с поля
+  [["docContractorFullName","contractor_full_name"],["docContractorSigName","document_signature_name"],["docContractorAddress","contractor_address"],
+   ["docContractorInn","contractor_inn"],["docContractorAccount","contractor_bank_account"],["docContractorBankName","contractor_bank_name"],
+   ["docContractorCorrAccount","contractor_corr_account"],["docContractorBik","contractor_bik"],["docContractorSigInitials","contractor_signatory_initials"]].forEach(([elId, field]) => {
+    const el = document.getElementById(elId);
+    if (el) el.onchange = () => { documentsState.contractor[field] = el.value; };
+  });
+
+  [["docContractNumber","contractNumber"],["docContractDate","contractDate"],["docAppendixNumber","appendixNumber"],
+   ["docNumber","docNumber"],["docDate","docDate"],["paymentDescription","paymentDescription"],["paymentAddress","paymentAddress"]].forEach(([elId, field]) => {
+    const el = document.getElementById(elId);
+    if (el) el.onchange = () => { documentsState[field] = el.value; };
+  });
+
+  const closingDocSel = document.getElementById("paymentClosingDocLabel");
+  if (closingDocSel) closingDocSel.onchange = (e) => { documentsState.closingDocLabel = e.target.value; renderApp(); };
+
+  const paymentAmountEl = document.getElementById("paymentAmount");
+  if (paymentAmountEl) paymentAmountEl.onchange = (e) => { documentsState.rows[0] = { ...documentsState.rows[0], price: e.target.value, quantity: "1" }; };
+
+  const addRowBtn = document.getElementById("docAddRowBtn");
+  if (addRowBtn) addRowBtn.onclick = () => { documentsState.rows.push({ description: "", unit: "усл.ед.", quantity: "1", price: "" }); renderApp(); };
+
+  document.querySelectorAll("[data-doc-remove-row]").forEach(btn => {
+    btn.onclick = () => {
+      const i = parseInt(btn.dataset.docRemoveRow);
+      if (documentsState.rows.length > 1) documentsState.rows.splice(i, 1);
+      renderApp();
+    };
+  });
+
+  document.querySelectorAll("[data-doc-row]").forEach(inp => {
+    inp.onchange = () => {
+      const [i, field] = inp.dataset.docRow.split(":");
+      documentsState.rows[parseInt(i)][field] = inp.value;
+    };
+  });
+  document.querySelectorAll("[data-doc-row-calc]").forEach(inp => {
+    inp.oninput = () => {
+      const [i, field] = inp.dataset.docRowCalc.split(":");
+      documentsState.rows[parseInt(i)][field] = inp.value;
+      renderApp();
+    };
+  });
+
+  const genBtn = document.getElementById("docGenerateBtn");
+  if (genBtn) genBtn.onclick = documentsState.type === "payment" ? handleGeneratePayment : handleGenerateActInvoice;
+}
+
+const CONTRACT_TYPE_TO_ROLE_LABELS = {
+  services_200: { contractor: "Исполнитель:", customer: "Заказчик:", contractorSig: "Исполнитель" },
+  supply_300: { contractor: "Поставщик (Исполнитель):", customer: "Покупатель (Заказчик):", contractorSig: "Предприниматель" },
+  rental_400: { contractor: "Арендодатель:", customer: "Арендатор:", contractorSig: "Арендодатель" },
+};
+
+async function handleGenerateActInvoice() {
+  const statusEl = document.getElementById("docGenerateStatus");
+  if (!documentsState.contractNumber || !documentsState.docNumber || documentsState.rows.some(r => !r.description || !r.quantity || !r.price)) {
+    statusEl.textContent = "⚠️ Заполните номер договора, номер документа и все позиции (описание/количество/цена).";
+    return;
+  }
+
+  const grant = GRANTS[documentsState.grantId];
+  const customer = getCustomer(grant.customer);
+  const contractor = documentsState.contractor;
+  const roleLabels = CONTRACT_TYPE_TO_ROLE_LABELS[documentsState.contractType];
+  const isAct = documentsState.type === "act";
+
+  const total = docTotalAmount();
+  const appendixRef = documentsState.appendixNumber ? ` (Приложение №${documentsState.appendixNumber})` : "";
+
+  const data = {
+    // Акт
+    act_number: documentsState.docNumber, act_date: documentsState.docDate,
+    contractor_full_name: contractor.contractor_full_name, contractor_address_label: contractor.contractor_passport_number ? "Адрес:" : "Место нахождения:",
+    contractor_address: contractor.contractor_address, contractor_inn: contractor.contractor_inn,
+    contractor_bank_account: contractor.contractor_bank_account, contractor_bank_name: contractor.contractor_bank_name,
+    contractor_corr_account: contractor.contractor_corr_account, contractor_bik: contractor.contractor_bik,
+    customer_req_full_name: customer.req_full_name, customer_address: customer.address, customer_inn_kpp: customer.inn_kpp,
+    igk: grant.igk,
+    contract_number: documentsState.contractNumber, contract_date: documentsState.contractDate,
+    appendix_reference: appendixRef ? `${appendixRef}.` : "",
+    total_amount_words: amountToWordsRu(Math.floor(total)), vat_clause_short: "без НДС",
+    contractor_short_name: contractor.document_signature_name, customer_signatory_position_short: customer.signatory_position_short,
+    contractor_signatory_initials: contractor.contractor_signatory_initials, customer_signatory_initials: customer.signatory_initials,
+    total_amount_numeric: formatRuNumber(total), total_vat_amount: "0",
+    // Счёт
+    invoice_number: documentsState.docNumber, invoice_date: documentsState.docDate,
+    contractor_role_label: roleLabels.contractor, customer_role_label: roleLabels.customer,
+    customer_full_name: customer.req_full_name, customer_inn: customer.inn_kpp.split("/")[0], customer_kpp: customer.inn_kpp.split("/")[1] || "",
+    appendix_reference_noperiod: appendixRef,
+    total_vat_amount_numeric: "0,00", items_count: String(documentsState.rows.length),
+    contractor_signature_label: roleLabels.contractorSig,
+    items: documentsState.rows.map((r, i) => ({
+      item_number: String(i + 1), item_description: r.description, item_unit: r.unit,
+      item_quantity: r.quantity, item_price: formatRuNumber(parseRuNumber(r.price)), item_total: formatRuNumber(docRowTotal(r)),
+    })),
+  };
+
+  await generateDocxFromTemplate(DOCUMENT_TEMPLATE_MAP[documentsState.type], data, `${isAct ? "Акт" : "Счёт"}_${documentsState.docNumber}`.replace(/[\\/]/g, "-"), statusEl);
+}
+
+async function handleGeneratePayment() {
+  const statusEl = document.getElementById("docGenerateStatus");
+  const amount = parseRuNumber(documentsState.rows[0] && documentsState.rows[0].price);
+  if (!amount || !documentsState.contractNumber || !documentsState.docNumber || !documentsState.paymentDescription) {
+    statusEl.textContent = "⚠️ Заполните сумму, описание, номер договора и номер закрывающего документа.";
+    return;
+  }
+  const kbkInfo = PAYMENT_KBK[documentsState.grantId];
+  if (!kbkInfo) { statusEl.textContent = "⚠️ Для этого гранта пока нет данных КБК."; return; }
+
+  const appendixRef = documentsState.appendixNumber ? ` (Приложение №${documentsState.appendixNumber})` : "";
+  const closingWord = documentsState.closingDocLabel === "Акт" ? "Акт" : "Товарная накладная";
+  const grounds = `Договор №${documentsState.contractNumber} от ${documentsState.contractDate}${appendixRef} ${closingWord} №${documentsState.docNumber} от ${documentsState.docDate} г.`;
+
+  const data = {
+    payment_kbk: kbkInfo.kbk, payment_kbk_label: kbkInfo.label,
+    total_amount_numeric: formatRuNumber(amount),
+    payment_description: documentsState.paymentDescription,
+    payment_grounds: grounds,
+    payment_address: documentsState.paymentAddress,
+  };
+
+  await generateDocxFromTemplate(DOCUMENT_TEMPLATE_MAP.payment, data, `Заявление_на_оплату_${documentsState.docNumber}`.replace(/[\\/]/g, "-"), statusEl);
+}
+
+async function generateDocxFromTemplate(templateFile, data, fileNameBase, statusEl) {
+  if (typeof window.docxtemplater === "undefined" || typeof window.PizZip === "undefined") {
+    statusEl.textContent = "❌ Не удалось загрузить библиотеку для создания Word-файла.";
+    return;
+  }
+  statusEl.textContent = "Готовлю файл...";
+  try {
+    const res = await fetch(`${window.location.origin}/templates/${templateFile}`);
+    if (!res.ok) throw new Error(`Шаблон не найден по адресу /templates/${templateFile} (код ${res.status})`);
+    const arrayBuffer = await res.arrayBuffer();
+    const zip = new window.PizZip(arrayBuffer);
+    const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => "" });
+    doc.render(data);
+    const blob = doc.getZip().generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${fileNameBase}.docx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    window.URL.revokeObjectURL(url);
+    statusEl.textContent = "✅ Файл скачан.";
+  } catch (err) {
+    statusEl.textContent = "❌ " + err.message;
+  }
+}
+
+// ============================================================
+// СТРАНИЦА «ДАШБОРД» — списки и задачи
+// ============================================================
+let tasksCache = null; // массив задач, загруженных из Firestore
+let tasksLoaded = false;
+let dashboardShowAll = false; // false = только мои задачи, true = все
+
+function loadKnownLists() {
+  try { return JSON.parse(window.localStorage.getItem("knownTaskLists") || "[]"); } catch (e) { return []; }
+}
+function saveKnownLists(lists) { window.localStorage.setItem("knownTaskLists", JSON.stringify(lists)); }
+
+async function loadTasks() {
+  try {
+    const snap = await fbDb.collection("tasks").get();
+    tasksCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    tasksCache = [];
+  }
+  tasksLoaded = true;
+}
+
+const TASK_STATUSES = ["Не начато", "В работе", "Готово"];
+function nextStatus(status) {
+  const idx = TASK_STATUSES.indexOf(status);
+  return TASK_STATUSES[(idx + 1) % TASK_STATUSES.length];
+}
+function statusColor(status) {
+  if (status === "Готово") return { bg: "#d1fae5", color: "#047857" };
+  if (status === "В работе") return { bg: "#dbeafe", color: "#1e40af" };
+  return { bg: "#f3f4f6", color: "#6b7280" };
+}
+
+function renderDashboardPage() {
+  if (!tasksLoaded) return `<div class="card"><h2>Дашборд</h2><div class="hint">Загрузка...</div></div>`;
+
+  const knownLists = loadKnownLists();
+  const listsFromTasks = [...new Set(tasksCache.map(t => t.list))];
+  const allLists = [...new Set([...knownLists, ...listsFromTasks])];
+
+  const visibleTasks = dashboardShowAll ? tasksCache : tasksCache.filter(t => t.assignee === currentUser.username);
+
+  const listBlocks = allLists.map(listName => {
+    const tasksInList = visibleTasks.filter(t => t.list === listName);
+    const rows = tasksInList.map(t => {
+      const sc = statusColor(t.status);
+      return `<tr>
+        <td><span data-cycle-status="${t.id}" style="cursor:pointer;display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${sc.bg};color:${sc.color}">${t.status}</span></td>
+        <td>${t.title}</td>
+        <td>${t.assignee || "—"}</td>
+        <td>${t.dueDate || "—"}</td>
+        <td><button class="btn-danger-text" data-delete-task="${t.id}">Удалить</button></td>
+      </tr>`;
+    }).join("");
+    return `
+    <div class="card card-wide" style="margin-bottom:16px">
+      <h3 style="margin-top:0">${listName}</h3>
+      ${tasksInList.length ? `<table class="budget-table"><thead><tr><th>Статус</th><th>Задача</th><th>Исполнитель</th><th>Срок</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="hint">Задач пока нет.</div>`}
+      <button class="btn btn-secondary btn-small" style="margin-top:12px" data-add-task-to-list="${listName}">+ Добавить задачу</button>
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="card card-wide">
+    <h2>Дашборд</h2>
+    <div class="checkbox-row" style="margin-top:0">
+      <input type="checkbox" id="dashboardShowAllCheck" ${dashboardShowAll ? "checked" : ""}>
+      <label for="dashboardShowAllCheck">Показать задачи всех пользователей (не только мои)</label>
+    </div>
+  </div>
+  ${listBlocks || '<div class="card card-wide"><div class="hint">Списков пока нет — добавьте первый.</div></div>'}
+  <button class="btn btn-secondary" id="addListBtn">+ Добавить список</button>`;
+}
+
+function attachDashboardHandlers() {
+  if (!tasksLoaded) {
+    loadTasks().then(() => { if (currentPage === "dashboard") renderApp(); });
+    return;
+  }
+
+  document.getElementById("addListBtn").onclick = () => {
+    const name = prompt("Название нового списка (например, название проекта):");
+    if (!name) return;
+    const lists = loadKnownLists();
+    if (!lists.includes(name)) { lists.push(name); saveKnownLists(lists); }
+    renderApp();
+  };
+
+  document.getElementById("dashboardShowAllCheck").onchange = (e) => { dashboardShowAll = e.target.checked; renderApp(); };
+
+  document.querySelectorAll("[data-add-task-to-list]").forEach(btn => {
+    btn.onclick = async () => {
+      const listName = btn.dataset.addTaskToList;
+      const title = prompt("Название задачи:");
+      if (!title) return;
+      const assignee = prompt("Исполнитель (логин):", currentUser.username) || currentUser.username;
+      const dueDate = prompt("Срок (напр. 20.08.2026), можно оставить пустым:") || "";
+      const id = "t_" + Date.now();
+      const task = { id, list: listName, title, assignee, status: "Не начато", dueDate };
+      tasksCache.push(task);
+      renderApp();
+      const { id: _drop, ...taskData } = task;
+      await fbDb.collection("tasks").doc(id).set(taskData);
+    };
+  });
+
+  document.querySelectorAll("[data-cycle-status]").forEach(el => {
+    el.onclick = async () => {
+      const id = el.dataset.cycleStatus;
+      const task = tasksCache.find(t => t.id === id);
+      if (!task) return;
+      task.status = nextStatus(task.status);
+      renderApp();
+      await fbDb.collection("tasks").doc(id).update({ status: task.status });
+    };
+  });
+
+  document.querySelectorAll("[data-delete-task]").forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.deleteTask;
+      if (!confirm("Удалить задачу?")) return;
+      tasksCache = tasksCache.filter(t => t.id !== id);
+      renderApp();
+      await fbDb.collection("tasks").doc(id).delete();
+    };
+  });
+}
+
 function renderApp() {
   const app = document.getElementById("app");
+  if (currentPage === "dashboard") { app.innerHTML = renderDashboardPage(); attachDashboardHandlers(); return; }
+  if (currentPage === "documents") { app.innerHTML = renderDocumentsPage(); attachDocumentsHandlers(); return; }
   if (currentPage === "settings") { app.innerHTML = renderSettings(); attachSettingsHandlers(); return; }
   if (currentPage === "smeta") { app.innerHTML = renderSmetaPage(); attachSmetaHandlers(); return; }
   if (currentPage === "planning") { app.innerHTML = renderPlanningPage(); attachPlanningHandlers(); return; }
@@ -1368,10 +1891,29 @@ document.getElementById("app").addEventListener("input", (e) => {
 });
 
 // ============================================================
-// ВХОД И СЕССИЯ
+// FIREBASE — ВХОД И ХРАНЕНИЕ ЗАДАЧ/ПЛАНИРОВАНИЯ
 // ============================================================
-let currentUser = null; // { username, role, allowedSubsidies, allowedPages }
-let usersSpreadsheetUrl = window.localStorage.getItem("usersSpreadsheetUrl") || "";
+let firebaseConfig = null;
+try { firebaseConfig = JSON.parse(window.localStorage.getItem("firebaseConfig") || "null"); } catch (e) {}
+let fbApp = null, fbAuth = null, fbDb = null;
+
+function initFirebase() {
+  if (!firebaseConfig || fbApp) return;
+  fbApp = firebase.initializeApp(firebaseConfig);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+}
+
+// Firebase Auth требует email - у нас же принято работать с простыми
+// логинами (напр. "admin"), поэтому логин без "@" превращаем в
+// псевдо-почту вида "admin@workspace.local" - это стандартный, безопасный
+// приём, реальная почта коллегам не нужна.
+function loginToEmail(login) {
+  const trimmed = String(login).trim();
+  return trimmed.includes("@") ? trimmed : `${trimmed}@workspace.local`;
+}
+
+let currentUser = null; // { uid, username, role, allowedSubsidies, allowedPages }
 
 function pageAllowed(page) {
   if (!currentUser) return false;
@@ -1387,52 +1929,37 @@ function visibleSubsidiesForUser() {
   return subsidies.filter(s => subsidyAllowedForUser(s.id));
 }
 
-function decodeTokenClientSide(token) {
-  // Клиент не может ПРОВЕРИТЬ подпись без секрета (он и не должен это уметь) -
-  // но может прочитать payload, чтобы понять срок действия и права для UI.
-  // Настоящая проверка подписи происходит на сервере при каждом запросе входа.
-  try {
-    const [bodyB64] = token.split(".");
-    const body = JSON.parse(atob(bodyB64.replace(/-/g, "+").replace(/_/g, "/")));
-    if (!body.exp || Date.now() > body.exp) return null;
-    return body;
-  } catch (e) {
-    return null;
-  }
-}
-
-function checkSession() {
-  const token = window.sessionStorage.getItem("authToken");
-  if (!token) return false;
-  const decoded = decodeTokenClientSide(token);
-  if (!decoded) { window.sessionStorage.removeItem("authToken"); return false; }
-  currentUser = decoded;
-  return true;
-}
-
 function renderLoginScreen() {
   const loginEl = document.getElementById("loginScreen");
   document.getElementById("appContainer").style.display = "none";
   loginEl.style.display = "block";
 
-  if (!usersSpreadsheetUrl) {
+  if (!firebaseConfig) {
     loginEl.innerHTML = `
       <div class="card">
-        <h2>Первоначальная настройка</h2>
-        <p class="hint">Укажите ссылку на Google Таблицу со списком пользователей (лист "Пользователи"). Это нужно один раз для этого браузера.</p>
-        <label>Ссылка на таблицу пользователей</label>
-        <input type="text" id="setupUsersSheetInput" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
-        <button class="btn btn-primary" style="margin-top:14px" id="setupSaveBtn">Сохранить</button>
+        <h2>Первоначальная настройка Firebase</h2>
+        <p class="hint">В консоли Firebase (console.firebase.google.com) → Project settings → Your apps → скопируйте объект конфигурации (firebaseConfig) и вставьте его сюда целиком.</p>
+        <label>Конфигурация Firebase (JSON)</label>
+        <textarea id="setupFirebaseInput" style="min-height:140px;font-family:monospace;font-size:12px" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}'></textarea>
+        <button class="btn btn-primary" style="margin-top:14px" id="setupFirebaseSaveBtn">Сохранить</button>
+        <div id="setupFirebaseStatus" style="margin-top:8px;font-size:13px"></div>
       </div>`;
-    document.getElementById("setupSaveBtn").onclick = () => {
-      const val = document.getElementById("setupUsersSheetInput").value.trim();
-      if (!val) return;
-      usersSpreadsheetUrl = val;
-      window.localStorage.setItem("usersSpreadsheetUrl", val);
-      renderLoginScreen();
+    document.getElementById("setupFirebaseSaveBtn").onclick = () => {
+      const raw = document.getElementById("setupFirebaseInput").value.trim();
+      const statusEl = document.getElementById("setupFirebaseStatus");
+      try {
+        const parsed = JSON.parse(raw);
+        firebaseConfig = parsed;
+        window.localStorage.setItem("firebaseConfig", JSON.stringify(parsed));
+        renderLoginScreen();
+      } catch (e) {
+        statusEl.textContent = "❌ Не похоже на корректный JSON. Скопируйте объект целиком, как есть, из консоли Firebase.";
+      }
     };
     return;
   }
+
+  initFirebase();
 
   loginEl.innerHTML = `
     <div class="card">
@@ -1443,14 +1970,14 @@ function renderLoginScreen() {
       <input type="password" id="loginPassword">
       <button class="btn btn-primary" style="margin-top:14px;width:100%" id="loginSubmitBtn">Войти</button>
       <div id="loginStatus" style="margin-top:10px;font-size:13px"></div>
-      <div class="hint" style="margin-top:14px;cursor:pointer;text-decoration:underline" id="changeUsersSheetLink">Изменить таблицу пользователей</div>
+      <div class="hint" style="margin-top:14px;cursor:pointer;text-decoration:underline" id="changeFirebaseConfigLink">Изменить настройки Firebase</div>
     </div>`;
 
   document.getElementById("loginSubmitBtn").onclick = handleLogin;
   document.getElementById("loginPassword").onkeydown = (e) => { if (e.key === "Enter") handleLogin(); };
-  document.getElementById("changeUsersSheetLink").onclick = () => {
-    usersSpreadsheetUrl = "";
-    window.localStorage.removeItem("usersSpreadsheetUrl");
+  document.getElementById("changeFirebaseConfigLink").onclick = () => {
+    firebaseConfig = null;
+    window.localStorage.removeItem("firebaseConfig");
     renderLoginScreen();
   };
 }
@@ -1463,25 +1990,23 @@ async function handleLogin() {
 
   statusEl.textContent = "Проверяю...";
   try {
-    const res = await fetch(`${window.location.origin}/.netlify/functions/auth-login`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, usersSpreadsheetUrlOrId: usersSpreadsheetUrl }),
-    });
-    const json = await res.json();
-    if (res.ok && json.success) {
-      window.sessionStorage.setItem("authToken", json.token);
-      currentUser = json.user;
-      showApp();
-    } else {
-      statusEl.textContent = "❌ " + (json.error || "Ошибка входа");
+    const cred = await fbAuth.signInWithEmailAndPassword(loginToEmail(username), password);
+    const profileSnap = await fbDb.collection("users").doc(cred.user.uid).get();
+    if (!profileSnap.exists) {
+      statusEl.textContent = "❌ Учётная запись есть, но нет профиля с правами доступа. Обратитесь к администратору.";
+      await fbAuth.signOut();
+      return;
     }
+    const profile = profileSnap.data();
+    currentUser = { uid: cred.user.uid, username, role: profile.role || "user", allowedSubsidies: profile.allowedSubsidies || "all", allowedPages: profile.allowedPages || "all" };
+    showApp();
   } catch (err) {
-    statusEl.textContent = "❌ Не удалось отправить запрос: " + err.message;
+    statusEl.textContent = "❌ Неверный логин или пароль.";
   }
 }
 
 function handleLogout() {
-  window.sessionStorage.removeItem("authToken");
+  if (fbAuth) fbAuth.signOut();
   currentUser = null;
   renderLoginScreen();
 }
@@ -1497,7 +2022,7 @@ function showApp() {
     el.style.display = allowed ? "" : "none";
   });
   if (!pageAllowed(currentPage)) {
-    const firstAllowed = ["generator", "smeta", "planning", "settings"].find(pageAllowed);
+    const firstAllowed = ["dashboard", "generator", "smeta", "planning", "documents", "settings"].find(pageAllowed);
     currentPage = firstAllowed || "generator";
   }
 
@@ -1525,8 +2050,24 @@ function showApp() {
   renderApp();
 }
 
-if (checkSession()) {
-  showApp();
+// Стартовая точка: если Firebase уже настроен, ждём восстановления сессии
+// (Firebase сам помнит вход между перезагрузками страницы); если нет -
+// сразу показываем экран первоначальной настройки/входа.
+if (firebaseConfig) {
+  initFirebase();
+  fbAuth.onAuthStateChanged(async (user) => {
+    if (user && !currentUser) {
+      const profileSnap = await fbDb.collection("users").doc(user.uid).get();
+      if (profileSnap.exists) {
+        const profile = profileSnap.data();
+        const username = user.email.endsWith("@workspace.local") ? user.email.replace("@workspace.local", "") : user.email;
+        currentUser = { uid: user.uid, username, role: profile.role || "user", allowedSubsidies: profile.allowedSubsidies || "all", allowedPages: profile.allowedPages || "all" };
+        showApp();
+        return;
+      }
+    }
+    if (!user) renderLoginScreen();
+  });
 } else {
   renderLoginScreen();
 }
