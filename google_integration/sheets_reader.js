@@ -21,6 +21,18 @@ function normalizeHeader(text) {
   return String(text).replace(/\s+/g, " ").trim();
 }
 
+// Переводит числовой индекс колонки (0-indexed) в буквенное обозначение
+// как в самой Google Таблице: 0->A, 1->B, ..., 25->Z, 26->AA, 27->AB...
+function columnIndexToLetter(index) {
+  let letter = "";
+  let n = index;
+  while (n >= 0) {
+    letter = String.fromCharCode((n % 26) + 65) + letter;
+    n = Math.floor(n / 26) - 1;
+  }
+  return letter;
+}
+
 /**
  * Читает один лист сметы (напр. "ТОЧКА" или "НИТЬ КУЛЬТУРЫ") и возвращает
  * массив строк в виде объектов { colName: value }, с добавленным полем
@@ -47,20 +59,35 @@ async function readBudgetSheet(spreadsheetId, sheetName) {
     throw new Error(`Лист "${sheetName}" пуст или короче ожидаемого (меньше 4 строк).`);
   }
 
-  // Определяем строку заголовков динамически: ищем среди первых 10 строк
-  // ту, где заполнено больше всего ячеек. У большинства смет заголовки на
-  // строке 3, но структура может отличаться (напр. у другого гранта) — если
-  // жёстко предполагать строку 3, при другой структуре почти все ячейки
-  // заголовка окажутся пустыми и распознается только 1 колонка.
-  let headerRowIndex = 2; // запасной вариант - строка 3, как было раньше
-  let maxFilledCells = -1;
+  // Определяем строку заголовков динамически: сначала ищем среди первых 10
+  // строк ту, где первая ячейка содержит одну из известных подписей
+  // заголовка ("Статья расходов", "Наименование расходов" и т.п.) - это
+  // надёжнее, чем просто "больше всего заполненных ячеек", потому что у
+  // некоторых смет сама строка заголовков содержит объединённые (то есть
+  // формально пустые) ячейки, и тогда обычная строка с данными может
+  // ошибочно выглядеть "более заполненной", чем настоящие заголовки.
+  const HEADER_KEYWORDS = [/^статья расходов/i, /^наименование расходов/i, /^наименование$/i];
+  let headerRowIndex = -1;
   const scanLimit = Math.min(10, rows.length);
   for (let i = 0; i < scanLimit; i++) {
     const row = rows[i] || [];
-    const filledCount = row.filter((cell) => cell && String(cell).trim() !== "").length;
-    if (filledCount > maxFilledCells) {
-      maxFilledCells = filledCount;
+    const firstCell = normalizeHeader(row[0]);
+    if (HEADER_KEYWORDS.some((re) => re.test(firstCell))) {
       headerRowIndex = i;
+      break;
+    }
+  }
+  // Запасной вариант, если ни одна из известных подписей не нашлась -
+  // прежняя эвристика "строка с максимумом заполненных ячеек".
+  if (headerRowIndex === -1) {
+    let maxFilledCells = -1;
+    for (let i = 0; i < scanLimit; i++) {
+      const row = rows[i] || [];
+      const filledCount = row.filter((cell) => cell && String(cell).trim() !== "").length;
+      if (filledCount > maxFilledCells) {
+        maxFilledCells = filledCount;
+        headerRowIndex = i;
+      }
     }
   }
 
@@ -91,14 +118,22 @@ async function readBudgetSheet(spreadsheetId, sheetName) {
     // сметах эта отметка может стоять не строго в первой колонке (напр.
     // из-за отступов/объединения ячеек) — поэтому проверяем первые
     // несколько ячеек строки, а не только колонку A.
-    const markerPattern = /^(итого|код\s*\d+|всего)\b/i;
+    // ВАЖНО: \b (граница слова) в JavaScript не распознаёт кириллицу как
+    // "словесные" символы - поэтому вместо \b после кириллических букв
+    // используем явный негативный лукахед (не даёт склеиться с "Итогооо"
+    // или похожим, но корректно работает на кириллице).
+    const markerPattern = /^(итого(?![а-яёА-ЯЁ])|код\s*\d+|всего(?![а-яёА-ЯЁ]))/i;
     const isGenericMarkerRow = row.slice(0, 4).some((cell) => markerPattern.test(normalizeHeader(cell)));
     if (isGenericMarkerRow) continue;
 
     // Пропускаем полностью пустые строки (нет ни наименования, ни подрядчика).
     const rowObj = {};
     headerRow.forEach((h, idx) => {
-      if (h) rowObj[h] = row[idx] !== undefined ? row[idx] : "";
+      // Если у колонки нет текста заголовка (напр. заголовок объединён с
+      // соседней ячейкой, а не продублирован) - НЕ теряем данные молча,
+      // даём запасное имя по букве столбца (Колонка_C и т.п.).
+      const key = h || `Колонка_${columnIndexToLetter(idx)}`;
+      rowObj[key] = row[idx] !== undefined ? row[idx] : "";
     });
 
     const hasContent = Object.values(rowObj).some((v) => v && String(v).trim() !== "");
