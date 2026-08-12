@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WorkSpace</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%0A%20%20%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%231e1315%22/%3E%0A%20%20%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22700%22%20font-size%3D%2234%22%20fill%3D%22%23dc2626%22%20text-anchor%3D%22middle%22%3EW%3C/text%3E%0A%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -33,6 +34,10 @@
   .steps-nav .dot.done { background: #d1fae5; color: #047857; }
   .card { background: white; border: 1px solid #e5e5e5; border-radius: 10px; padding: 24px; margin-bottom: 16px; max-width: 900px; }
   .card-wide { max-width: none; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .modal-box { background: white; border-radius: 10px; padding: 24px; max-width: 480px; width: 90%; max-height: 85vh; overflow-y: auto; }
+  .modal-box h2 { margin-top: 0; }
+  .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
   h2 { font-size: 17px; margin-top: 0; margin-bottom: 18px; }
   h3 { font-size: 14px; margin: 20px 0 10px; color: #444; }
   label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; margin-top: 12px; color: #333; }
@@ -87,6 +92,7 @@
 <body>
 
 <div id="loginScreen" style="display:none; max-width: 420px; margin: 80px auto; padding: 0 20px;"></div>
+<div id="modalRoot"></div>
 
 <div id="appContainer" style="display:none">
 <div class="sidebar">
@@ -335,6 +341,33 @@ const PAGE_SUBTITLES = {
   documents: "Акты, счета и заявления на оплату — генерация из тех же данных, что и договоры.",
   settings: "Реквизиты заказчиков и настройка субсидий/проектов.",
 };
+
+// ============================================================
+// МОДАЛЬНОЕ ОКНО (общее, для форм в стиле приложения вместо prompt())
+// ============================================================
+function showModal(title, bodyHtml, onSubmit) {
+  const root = document.getElementById("modalRoot");
+  root.innerHTML = `
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal-box">
+        <h2>${title}</h2>
+        ${bodyHtml}
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" id="modalCancelBtn">Отмена</button>
+          <button class="btn btn-primary" id="modalSaveBtn">Сохранить</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById("modalCancelBtn").onclick = closeModal;
+  document.getElementById("modalOverlay").onclick = (e) => { if (e.target.id === "modalOverlay") closeModal(); };
+  document.getElementById("modalSaveBtn").onclick = async () => {
+    const result = await onSubmit();
+    if (result !== false) closeModal();
+  };
+}
+function closeModal() {
+  document.getElementById("modalRoot").innerHTML = "";
+}
 
 function goToPage(page) {
   currentPage = page;
@@ -684,12 +717,23 @@ function loadSubsidies() {
 function saveSubsidies(list) { window.localStorage.setItem("subsidies", JSON.stringify(list)); subsidies = list; }
 let subsidies = loadSubsidies();
 
+function smetaCacheKey(subsidyId, projectId) { return `smetaCache_${subsidyId}_${projectId}`; }
+function loadSmetaCache(subsidyId, projectId) {
+  try { return JSON.parse(window.localStorage.getItem(smetaCacheKey(subsidyId, projectId)) || "null"); } catch (e) { return null; }
+}
+function saveSmetaCache(subsidyId, projectId, items) {
+  try { window.localStorage.setItem(smetaCacheKey(subsidyId, projectId), JSON.stringify(items)); } catch (e) {}
+}
+
 let smetaState = {
-  selectedSubsidyId: subsidies[0] ? subsidies[0].id : null,
-  selectedProjectId: null,
-  loadedItems: null, // массив строк, полученных из Google Таблицы
+  selectedSubsidyId: window.localStorage.getItem("smetaLastSubsidyId") || (subsidies[0] ? subsidies[0].id : null),
+  selectedProjectId: window.localStorage.getItem("smetaLastProjectId") || null,
+  loadedItems: null, // массив строк - из кэша (сразу) или из Google Таблицы (после загрузки)
   editingRow: null, // индекс строки, для которой открыта форма учёта
 };
+if (smetaState.selectedProjectId) {
+  smetaState.loadedItems = loadSmetaCache(smetaState.selectedSubsidyId, smetaState.selectedProjectId);
+}
 
 function findSubsidy(id) { return subsidies.find(s => s.id === id); }
 function findProject(subsidy, id) { return subsidy ? subsidy.projects.find(p => p.id === id) : null; }
@@ -848,13 +892,19 @@ function renderBudgetTable() {
   return `<div style="overflow-x:auto"><table class="budget-table"><thead><tr>${columns.map(c=>`<th>${c}</th>`).join("")}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+let smetaAutoRefreshedOnce = false;
 function attachSmetaHandlers() {
+  if (!smetaAutoRefreshedOnce && smetaState.selectedSubsidyId && smetaState.selectedProjectId) {
+    smetaAutoRefreshedOnce = true;
+    handleLoadBudget(true); // тихо обновляем в фоне то, что показали из кэша
+  }
   document.querySelectorAll("[data-select-subsidy]").forEach(el => {
     el.onclick = () => {
       const id = el.dataset.selectSubsidy;
       smetaState.selectedSubsidyId = smetaState.selectedSubsidyId === id ? null : id;
       smetaState.selectedProjectId = null;
       smetaState.loadedItems = null;
+      window.localStorage.setItem("smetaLastSubsidyId", smetaState.selectedSubsidyId || "");
       renderApp();
     };
   });
@@ -863,9 +913,18 @@ function attachSmetaHandlers() {
       const pId = el.dataset.selectProject;
       const wasSelected = smetaState.selectedProjectId === pId;
       smetaState.selectedProjectId = wasSelected ? null : pId;
-      smetaState.loadedItems = null;
-      renderApp();
-      if (!wasSelected) handleLoadBudget();
+      window.localStorage.setItem("smetaLastProjectId", smetaState.selectedProjectId || "");
+      if (!wasSelected) {
+        // Сразу показываем то, что было загружено в прошлый раз (если
+        // есть) - не нужно ждать сеть, чтобы увидеть таблицу; свежие данные
+        // подгрузятся следом и тихо заменят кэш.
+        smetaState.loadedItems = loadSmetaCache(smetaState.selectedSubsidyId, pId);
+        renderApp();
+        handleLoadBudget();
+      } else {
+        smetaState.loadedItems = null;
+        renderApp();
+      }
     };
   });
 
@@ -880,14 +939,17 @@ function attachSmetaHandlers() {
   });
 }
 
-async function handleLoadBudget() {
+async function handleLoadBudget(silent) {
   const subsidy = findSubsidy(smetaState.selectedSubsidyId);
   const project = findProject(subsidy, smetaState.selectedProjectId);
   const siteUrl = window.location.origin;
   const statusEl = document.getElementById("smetaLoadStatus");
-  if (!subsidy.spreadsheetUrl) { alert("Сначала укажите ссылку на Google Таблицу для этой субсидии в разделе ⚙ Настройки"); return; }
+  if (!subsidy.spreadsheetUrl) {
+    if (!silent) alert("Сначала укажите ссылку на Google Таблицу для этой субсидии в разделе ⚙ Настройки");
+    return;
+  }
 
-  statusEl.textContent = "Загружаю...";
+  if (statusEl) statusEl.textContent = "Загружаю...";
   try {
     const res = await fetch(`${siteUrl}/.netlify/functions/read-budget-sheet`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -896,12 +958,13 @@ async function handleLoadBudget() {
     const json = await res.json();
     if (res.ok && json.success) {
       smetaState.loadedItems = json.items;
-      statusEl.textContent = `✅ Загружено строк: ${json.items.length}`;
+      saveSmetaCache(smetaState.selectedSubsidyId, smetaState.selectedProjectId, json.items);
+      if (statusEl) statusEl.textContent = `✅ Загружено строк: ${json.items.length}`;
     } else {
-      statusEl.textContent = "❌ " + (json.error || "Ошибка загрузки");
+      if (statusEl) statusEl.textContent = "❌ " + (json.error || "Ошибка загрузки");
     }
   } catch (err) {
-    statusEl.textContent = "❌ Не удалось отправить запрос: " + err.message;
+    if (statusEl) statusEl.textContent = "❌ Не удалось отправить запрос: " + err.message;
   }
   renderApp();
 }
@@ -1319,7 +1382,7 @@ function renderActInvoiceForm() {
       <td><input type="text" data-doc-row="${i}:unit" value="${r.unit||''}" style="width:80px"></td>
       <td><input type="number" data-doc-row-calc="${i}:quantity" value="${r.quantity||''}" style="width:70px"></td>
       <td><input type="number" data-doc-row-calc="${i}:price" value="${r.price||''}" style="width:100px"></td>
-      <td style="text-align:right;padding-right:8px">${formatRuNumber(docRowTotal(r))}</td>
+      <td style="text-align:right;padding-right:8px" id="docRowTotal_${i}">${formatRuNumber(docRowTotal(r))}</td>
       <td><button class="btn-danger-text" data-doc-remove-row="${i}">✕</button></td>
     </tr>`).join("");
 
@@ -1374,7 +1437,7 @@ function renderActInvoiceForm() {
       <tbody>${rowsHtml}</tbody>
     </table>
     <button class="btn btn-secondary btn-small" style="margin-top:8px" id="docAddRowBtn">+ Добавить строку</button>
-    <div style="margin-top:12px;font-weight:600">Итого: ${formatRuNumber(docTotalAmount())} руб.</div>
+    <div style="margin-top:12px;font-weight:600" id="docOverallTotal">Итого: ${formatRuNumber(docTotalAmount())} руб.</div>
 
     <div style="margin-top:20px">
       <button class="btn btn-primary" id="docGenerateBtn">Скачать ${docLabel} (Word)</button>
@@ -1470,7 +1533,13 @@ function attachDocumentsHandlers() {
     inp.oninput = () => {
       const [i, field] = inp.dataset.docRowCalc.split(":");
       documentsState.rows[parseInt(i)][field] = inp.value;
-      renderApp();
+      // Точечно обновляем только сумму строки и общий итог - без
+      // renderApp(), иначе полная перерисовка сбрасывает прокрутку
+      // страницы и фокус прямо во время набора цифр.
+      const rowTotalEl = document.getElementById(`docRowTotal_${i}`);
+      if (rowTotalEl) rowTotalEl.textContent = formatRuNumber(docRowTotal(documentsState.rows[parseInt(i)]));
+      const overallTotalEl = document.getElementById("docOverallTotal");
+      if (overallTotalEl) overallTotalEl.textContent = `Итого: ${formatRuNumber(docTotalAmount())} руб.`;
     };
   });
 
@@ -1586,12 +1655,22 @@ async function generateDocxFromTemplate(templateFile, data, fileNameBase, status
 // ============================================================
 let tasksCache = null; // массив задач, загруженных из Firestore
 let tasksLoaded = false;
+let knownListsCache = []; // названия списков, загруженные из Firestore
 let dashboardShowAll = false; // false = только мои задачи, true = все
 
-function loadKnownLists() {
-  try { return JSON.parse(window.localStorage.getItem("knownTaskLists") || "[]"); } catch (e) { return []; }
+async function loadKnownLists() {
+  try {
+    const snap = await fbDb.collection("meta").doc("taskLists").get();
+    knownListsCache = snap.exists ? (snap.data().names || []) : [];
+  } catch (e) {
+    knownListsCache = [];
+  }
 }
-function saveKnownLists(lists) { window.localStorage.setItem("knownTaskLists", JSON.stringify(lists)); }
+async function addKnownList(name) {
+  if (knownListsCache.includes(name)) return;
+  knownListsCache.push(name);
+  await fbDb.collection("meta").doc("taskLists").set({ names: knownListsCache });
+}
 
 async function loadTasks() {
   try {
@@ -1600,6 +1679,7 @@ async function loadTasks() {
   } catch (e) {
     tasksCache = [];
   }
+  await loadKnownLists();
   tasksLoaded = true;
 }
 
@@ -1617,9 +1697,8 @@ function statusColor(status) {
 function renderDashboardPage() {
   if (!tasksLoaded) return `<div class="card"><h2>Дашборд</h2><div class="hint">Загрузка...</div></div>`;
 
-  const knownLists = loadKnownLists();
   const listsFromTasks = [...new Set(tasksCache.map(t => t.list))];
-  const allLists = [...new Set([...knownLists, ...listsFromTasks])];
+  const allLists = [...new Set([...knownListsCache, ...listsFromTasks])];
 
   const visibleTasks = dashboardShowAll ? tasksCache : tasksCache.filter(t => t.assignee === currentUser.username);
 
@@ -1662,28 +1741,46 @@ function attachDashboardHandlers() {
   }
 
   document.getElementById("addListBtn").onclick = () => {
-    const name = prompt("Название нового списка (например, название проекта):");
-    if (!name) return;
-    const lists = loadKnownLists();
-    if (!lists.includes(name)) { lists.push(name); saveKnownLists(lists); }
-    renderApp();
+    showModal("Новый список", `
+      <label class="required">Название списка</label>
+      <input type="text" id="modalListName" placeholder="Например, название проекта">
+    `, async () => {
+      const name = document.getElementById("modalListName").value.trim();
+      if (!name) return false;
+      await addKnownList(name);
+      renderApp();
+      return true;
+    });
   };
 
   document.getElementById("dashboardShowAllCheck").onchange = (e) => { dashboardShowAll = e.target.checked; renderApp(); };
 
   document.querySelectorAll("[data-add-task-to-list]").forEach(btn => {
-    btn.onclick = async () => {
+    btn.onclick = () => {
       const listName = btn.dataset.addTaskToList;
-      const title = prompt("Название задачи:");
-      if (!title) return;
-      const assignee = prompt("Исполнитель (логин):", currentUser.username) || currentUser.username;
-      const dueDate = prompt("Срок (напр. 20.08.2026), можно оставить пустым:") || "";
-      const id = "t_" + Date.now();
-      const task = { id, list: listName, title, assignee, status: "Не начато", dueDate };
-      tasksCache.push(task);
-      renderApp();
-      const { id: _drop, ...taskData } = task;
-      await fbDb.collection("tasks").doc(id).set(taskData);
+      showModal("Новая задача", `
+        <label class="required">Название задачи</label>
+        <input type="text" id="modalTaskTitle">
+        <label class="required">Исполнитель (логин)</label>
+        <input type="text" id="modalTaskAssignee" value="${currentUser.username}">
+        <label>Срок</label>
+        <input type="text" id="modalTaskDueDate" placeholder="напр. 20.08.2026">
+        <label>Статус</label>
+        <select id="modalTaskStatus">${TASK_STATUSES.map(s => `<option ${s==="Не начато"?"selected":""}>${s}</option>`).join("")}</select>
+      `, async () => {
+        const title = document.getElementById("modalTaskTitle").value.trim();
+        if (!title) return false;
+        const assignee = document.getElementById("modalTaskAssignee").value.trim() || currentUser.username;
+        const dueDate = document.getElementById("modalTaskDueDate").value.trim();
+        const status = document.getElementById("modalTaskStatus").value;
+        const id = "t_" + Date.now();
+        const task = { id, list: listName, title, assignee, status, dueDate };
+        tasksCache.push(task);
+        renderApp();
+        const { id: _drop, ...taskData } = task;
+        await fbDb.collection("tasks").doc(id).set(taskData);
+        return true;
+      });
     };
   });
 
@@ -1893,8 +1990,19 @@ document.getElementById("app").addEventListener("input", (e) => {
 // ============================================================
 // FIREBASE — ВХОД И ХРАНЕНИЕ ЗАДАЧ/ПЛАНИРОВАНИЯ
 // ============================================================
-let firebaseConfig = null;
-try { firebaseConfig = JSON.parse(window.localStorage.getItem("firebaseConfig") || "null"); } catch (e) {}
+// Конфигурация Firebase-проекта WorkSpace - это публичный идентификатор
+// проекта (не секрет, как GOOGLE_SERVICE_ACCOUNT_KEY), поэтому его можно
+// безопасно хранить прямо в коде. Реальная защита данных - в правилах
+// безопасности Firestore (firestore.rules), а не в сокрытии этого объекта.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAtkUkdbUAV87jYQ-RML9R3soghpEl6GUU",
+  authDomain: "workspace-ursi.firebaseapp.com",
+  projectId: "workspace-ursi",
+  storageBucket: "workspace-ursi.firebasestorage.app",
+  messagingSenderId: "878290426896",
+  appId: "1:878290426896:web:785903ceaed24d688b7e95",
+};
+let firebaseConfig = FIREBASE_CONFIG;
 let fbApp = null, fbAuth = null, fbDb = null;
 
 function initFirebase() {
@@ -1968,31 +2076,6 @@ function renderLoginScreen() {
   document.getElementById("appContainer").style.display = "none";
   loginEl.style.display = "block";
 
-  if (!firebaseConfig) {
-    loginEl.innerHTML = `
-      <div class="card">
-        <h2>Первоначальная настройка Firebase</h2>
-        <p class="hint">В консоли Firebase (console.firebase.google.com) → Project settings → Your apps → скопируйте объект конфигурации (firebaseConfig) и вставьте его сюда целиком.</p>
-        <label>Конфигурация Firebase (JSON)</label>
-        <textarea id="setupFirebaseInput" style="min-height:140px;font-family:monospace;font-size:12px" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}'></textarea>
-        <button class="btn btn-primary" style="margin-top:14px" id="setupFirebaseSaveBtn">Сохранить</button>
-        <div id="setupFirebaseStatus" style="margin-top:8px;font-size:13px"></div>
-      </div>`;
-    document.getElementById("setupFirebaseSaveBtn").onclick = () => {
-      const raw = document.getElementById("setupFirebaseInput").value.trim();
-      const statusEl = document.getElementById("setupFirebaseStatus");
-      try {
-        const parsed = parseFirebaseConfigInput(raw);
-        firebaseConfig = parsed;
-        window.localStorage.setItem("firebaseConfig", JSON.stringify(parsed));
-        renderLoginScreen();
-      } catch (e) {
-        statusEl.textContent = "❌ Не удалось распознать конфигурацию. Скопируйте объект целиком, как есть, из консоли Firebase (можно вместе с «const firebaseConfig = ... ;» — это тоже подойдёт).";
-      }
-    };
-    return;
-  }
-
   initFirebase();
 
   loginEl.innerHTML = `
@@ -2004,16 +2087,10 @@ function renderLoginScreen() {
       <input type="password" id="loginPassword">
       <button class="btn btn-primary" style="margin-top:14px;width:100%" id="loginSubmitBtn">Войти</button>
       <div id="loginStatus" style="margin-top:10px;font-size:13px"></div>
-      <div class="hint" style="margin-top:14px;cursor:pointer;text-decoration:underline" id="changeFirebaseConfigLink">Изменить настройки Firebase</div>
     </div>`;
 
   document.getElementById("loginSubmitBtn").onclick = handleLogin;
   document.getElementById("loginPassword").onkeydown = (e) => { if (e.key === "Enter") handleLogin(); };
-  document.getElementById("changeFirebaseConfigLink").onclick = () => {
-    firebaseConfig = null;
-    window.localStorage.removeItem("firebaseConfig");
-    renderLoginScreen();
-  };
 }
 
 async function handleLogin() {
@@ -2084,27 +2161,22 @@ function showApp() {
   renderApp();
 }
 
-// Стартовая точка: если Firebase уже настроен, ждём восстановления сессии
-// (Firebase сам помнит вход между перезагрузками страницы); если нет -
-// сразу показываем экран первоначальной настройки/входа.
-if (firebaseConfig) {
-  initFirebase();
-  fbAuth.onAuthStateChanged(async (user) => {
-    if (user && !currentUser) {
-      const profileSnap = await fbDb.collection("users").doc(user.uid).get();
-      if (profileSnap.exists) {
-        const profile = profileSnap.data();
-        const username = user.email.endsWith("@workspace.local") ? user.email.replace("@workspace.local", "") : user.email;
-        currentUser = { uid: user.uid, username, role: profile.role || "user", allowedSubsidies: profile.allowedSubsidies || "all", allowedPages: profile.allowedPages || "all" };
-        showApp();
-        return;
-      }
+// Стартовая точка: Firebase сам помнит вход между перезагрузками страницы
+// (onAuthStateChanged восстанавливает сессию автоматически).
+initFirebase();
+fbAuth.onAuthStateChanged(async (user) => {
+  if (user && !currentUser) {
+    const profileSnap = await fbDb.collection("users").doc(user.uid).get();
+    if (profileSnap.exists) {
+      const profile = profileSnap.data();
+      const username = user.email.endsWith("@workspace.local") ? user.email.replace("@workspace.local", "") : user.email;
+      currentUser = { uid: user.uid, username, role: profile.role || "user", allowedSubsidies: profile.allowedSubsidies || "all", allowedPages: profile.allowedPages || "all" };
+      showApp();
+      return;
     }
-    if (!user) renderLoginScreen();
-  });
-} else {
-  renderLoginScreen();
-}
+  }
+  if (!user) renderLoginScreen();
+});
 
 </script>
 </body>
