@@ -1904,6 +1904,40 @@ function initFirebase() {
   fbDb = firebase.firestore();
 }
 
+/**
+ * Из консоли Firebase обычно копируется НЕ строгий JSON, а фрагмент кода
+ * вида:
+ *   const firebaseConfig = {
+ *     apiKey: "...",
+ *     authDomain: "...",
+ *     ...
+ *   };
+ * (ключи без кавычек, есть "const ... =" в начале и ";" в конце) - строгий
+ * JSON.parse на таком тексте падает. Эта функция сначала пробует честный
+ * JSON.parse (вдруг вставили именно JSON), а если не вышло - вырезает
+ * фигурные скобки объекта и безопасно вычисляет его как JS-объект (это
+ * данные, которые пользователь сам вставил в свой же браузер, а не код
+ * с чужого сайта - поэтому такое вычисление здесь уместно и безопасно).
+ */
+function parseFirebaseConfigInput(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    // не строгий JSON - пробуем как фрагмент JS-кода
+  }
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Не найдены фигурные скобки объекта конфигурации.");
+  }
+  const objectLiteral = raw.slice(start, end + 1);
+  const value = new Function("return (" + objectLiteral + ");")();
+  if (!value || typeof value !== "object" || !value.apiKey) {
+    throw new Error("Похоже, это не конфигурация Firebase (нет поля apiKey).");
+  }
+  return value;
+}
+
 // Firebase Auth требует email - у нас же принято работать с простыми
 // логинами (напр. "admin"), поэтому логин без "@" превращаем в
 // псевдо-почту вида "admin@workspace.local" - это стандартный, безопасный
@@ -1948,12 +1982,12 @@ function renderLoginScreen() {
       const raw = document.getElementById("setupFirebaseInput").value.trim();
       const statusEl = document.getElementById("setupFirebaseStatus");
       try {
-        const parsed = JSON.parse(raw);
+        const parsed = parseFirebaseConfigInput(raw);
         firebaseConfig = parsed;
         window.localStorage.setItem("firebaseConfig", JSON.stringify(parsed));
         renderLoginScreen();
       } catch (e) {
-        statusEl.textContent = "❌ Не похоже на корректный JSON. Скопируйте объект целиком, как есть, из консоли Firebase.";
+        statusEl.textContent = "❌ Не удалось распознать конфигурацию. Скопируйте объект целиком, как есть, из консоли Firebase (можно вместе с «const firebaseConfig = ... ;» — это тоже подойдёт).";
       }
     };
     return;
