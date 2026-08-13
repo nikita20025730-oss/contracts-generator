@@ -12,7 +12,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WorkSpace</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%0A%20%20%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%231e1315%22/%3E%0A%20%20%3Ctext%20x%3D%2232%22%20y%3D%2244%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22700%22%20font-size%3D%2234%22%20fill%3D%22%23dc2626%22%20text-anchor%3D%22middle%22%3EW%3C/text%3E%0A%3C/svg%3E">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#dc2626">
+<!-- Поддержка "Добавить на экран Домой" в Safari на iPhone/iPad -->
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WorkSpace">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -70,7 +77,19 @@
   body { font-family: "Montserrat", -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; line-height: 1.5; color: var(--text); background: var(--bg); min-height: 100vh; transition: background 0.15s, color 0.15s; }
   #appContainer { display: flex; min-height: 100vh; }
   .nav-item[id="logoutNavItem"] { position: sticky; top: 100vh; cursor: pointer; }
-  .sidebar { width: 232px; flex-shrink: 0; background: var(--sidebar-bg); color: var(--sidebar-text); padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--sidebar-border); display: flex; flex-direction: column; }
+  .sidebar { width: 232px; flex-shrink: 0; background: var(--sidebar-bg); color: var(--sidebar-text); padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--sidebar-border); display: flex; flex-direction: column; z-index: 100; transition: transform 0.2s; }
+  .mobile-topbar { display: none; }
+  @media (max-width: 760px) {
+    #appContainer { position: relative; }
+    .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); box-shadow: 4px 0 16px rgba(0,0,0,0.15); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 99; }
+    .sidebar-overlay.open { display: block; }
+    .mobile-topbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--sidebar-bg); border-bottom: 1px solid var(--sidebar-border); position: sticky; top: 0; z-index: 50; }
+    .mobile-topbar .hamburger { background: none; border: none; color: var(--sidebar-text-active); cursor: pointer; padding: 4px; display: flex; }
+    .mobile-topbar .brand { font-weight: 700; color: var(--sidebar-text-active); font-size: 15px; }
+    .main { padding: 16px; }
+  }
   .sidebar h1 { font-size: 15px; font-weight: 700; padding: 0 20px 16px; margin: 0; border-bottom: 1px solid var(--sidebar-border); color: var(--sidebar-text-active); letter-spacing: -0.01em; }
   .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; font-size: 14px; color: var(--sidebar-text); border-left: 3px solid transparent; }
   .nav-item svg { flex-shrink: 0; opacity: 0.85; }
@@ -186,7 +205,12 @@
 <div id="modalRoot"></div>
 
 <div id="appContainer" style="display:none">
-<div class="sidebar">
+<div class="mobile-topbar">
+  <button class="hamburger" id="mobileMenuToggle"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  <span class="brand">WorkSpace</span>
+</div>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+<div class="sidebar" id="mainSidebar">
   <h1>WorkSpace</h1>
   <div class="nav-item" data-page="dashboard">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
@@ -2141,7 +2165,7 @@ async function saveKnownLists() {
 }
 async function addKnownList(name, color, description) {
   if (knownListsCache.some(l => l.name === name)) return;
-  knownListsCache.push({ name, color: color || LIST_COLORS[0], description: description || "" });
+  knownListsCache.push({ name, color: color || LIST_COLORS[0], description: description || "", createdBy: currentUser.username });
   await saveKnownLists();
 }
 async function updateKnownList(name, updates) {
@@ -2161,6 +2185,13 @@ async function loadTasks() {
   await loadKnownLists();
   if (!usersDirectoryLoaded) await loadUsersDirectory();
   tasksLoaded = true;
+}
+
+// Регистронезависимое сравнение логинов - защита на случай уже
+// сохранённых задач, где значение assignee могло разойтись в регистре
+// (см. исправленный баг в handleLogin про несовпадение логина между сессиями).
+function sameUsername(a, b) {
+  return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 }
 
 function displayNameFor(username) {
@@ -2219,17 +2250,24 @@ function renderDashboardPage() {
   if (!tasksLoaded) return `<div class="card"><h2>Дашборд</h2><div class="hint">Загрузка...</div></div>`;
 
   const listsFromTasks = [...new Set(tasksCache.map(t => t.list))].filter(name => !knownListsCache.some(l => l.name === name));
-  const allLists = [...knownListsCache, ...listsFromTasks.map(name => ({ name, color: LIST_COLORS[0], description: "" }))];
+  const allLists = [...knownListsCache, ...listsFromTasks.map(name => ({ name, color: LIST_COLORS[0], description: "", createdBy: null }))];
 
-  const visibleTasks = dashboardShowAll ? tasksCache : tasksCache.filter(t => t.assignee === currentUser.username);
+  // "Мои списки" - списки, которые создал сам пользователь (списки без
+  // createdBy - старые данные до этой доработки - показываем всем, чтобы
+  // ничего не потерялось).
+  const myLists = allLists.filter(l => !l.createdBy || sameUsername(l.createdBy, currentUser.username));
+  // Чужие списки - нужны, чтобы найти в них задачи, назначенные на меня
+  // (раздел "Назначенные").
+  const otherLists = allLists.filter(l => l.createdBy && !sameUsername(l.createdBy, currentUser.username));
+
+  const visibleTasks = dashboardShowAll ? tasksCache : tasksCache.filter(t => sameUsername(t.assignee, currentUser.username));
   // Выполненные задачи ("Готово") автоматически уходят из "Сегодня" и из
   // обычных списков проекта - они видны только в архиве внизу страницы.
   const activeTasks = visibleTasks.filter(t => t.status !== "Готово");
   const archivedTasks = visibleTasks.filter(t => t.status === "Готово");
   const todayTasks = activeTasks.filter(t => t.today);
 
-  const listBlocks = allLists.map(list => {
-    const tasksInList = activeTasks.filter(t => t.list === list.name);
+  const renderListCard = (list, tasksInList, showAddButton) => {
     const rows = tasksInList.map(t => renderTaskRow(t, false)).join("");
     return `
     <div class="list-card" style="border-left-color:${list.color}">
@@ -2238,14 +2276,31 @@ function renderDashboardPage() {
           <div class="list-card-title"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}</div>
           ${list.description ? `<div class="list-card-desc">${list.description}</div>` : ""}
         </div>
-        <button class="icon-btn" data-edit-list="${list.name}" title="Изменить список"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+        ${showAddButton !== false ? `<button class="icon-btn" data-edit-list="${list.name}" title="Изменить список"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>` : ""}
       </div>
       <div style="margin-top:10px">
         ${tasksInList.length ? rows : `<div class="hint">Задач пока нет.</div>`}
       </div>
-      <button class="btn btn-secondary btn-small" style="margin-top:12px" data-add-task-to-list="${list.name}">+ Добавить задачу</button>
+      ${showAddButton !== false ? `<button class="btn btn-secondary btn-small" style="margin-top:12px" data-add-task-to-list="${list.name}">+ Добавить задачу</button>` : ""}
     </div>`;
+  };
+
+  const myListBlocks = myLists.map(list => {
+    const tasksInList = visibleTasks.filter(t => t.list === list.name && t.status !== "Готово");
+    return renderListCard(list, tasksInList, true);
   }).join("");
+
+  // "Назначенные" - задачи из ЧУЖИХ списков, назначенные на меня. Не
+  // зависит от переключателя "показать всех", поскольку по смыслу это
+  // всегда "мои" задачи, просто в чужом списке.
+  const assignedTasks = tasksCache.filter(t =>
+    t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) &&
+    otherLists.some(l => l.name === t.list)
+  );
+  const assignedBlock = assignedTasks.length || otherLists.length ? renderListCard(
+    { name: "Назначенные", color: "#6b7280", description: "Задачи из чужих списков, назначенные на вас" },
+    assignedTasks, false
+  ) : "";
 
   const archiveSection = dashboardShowArchive ? `
   <div class="list-card" style="border-left-color:var(--border-strong);margin-top:16px">
@@ -2262,8 +2317,11 @@ function renderDashboardPage() {
     ${todayTasks.length ? todayTasks.map(t => renderTaskRow(t, true)).join("") : `<div class="hint" style="padding-top:10px">На сегодня ничего не отмечено — включите тумблер «Сегодня» у любой задачи.</div>`}
   </div>
 
-  <div class="board-grid">${listBlocks || '<div class="hint">Списков пока нет — добавьте первый.</div>'}</div>
+  <h3 style="margin-top:20px">Мои списки</h3>
+  <div class="board-grid">${myListBlocks || '<div class="hint">Списков пока нет — добавьте первый.</div>'}</div>
   <button class="btn btn-secondary" style="margin-top:16px" id="addListBtn">+ Добавить список</button>
+
+  ${assignedBlock ? `<h3 style="margin-top:24px">Назначенные</h3><div class="board-grid">${assignedBlock}</div>` : ""}
 
   <div class="dashboard-footer-bar">
     <div class="checkbox-row" style="margin-top:0">
@@ -2664,8 +2722,19 @@ async function handleGenerate() {
   } finally { btn.disabled = false; btn.textContent = "Сгенерировать и скачать договор"; }
 }
 
+function closeMobileMenu() {
+  document.getElementById("mainSidebar").classList.remove("open");
+  document.getElementById("sidebarOverlay").classList.remove("open");
+}
+function openMobileMenu() {
+  document.getElementById("mainSidebar").classList.add("open");
+  document.getElementById("sidebarOverlay").classList.add("open");
+}
+document.getElementById("mobileMenuToggle").onclick = openMobileMenu;
+document.getElementById("sidebarOverlay").onclick = closeMobileMenu;
+
 document.querySelectorAll(".nav-item[data-page]").forEach(el => {
-  el.onclick = () => goToPage(el.dataset.page);
+  el.onclick = () => { goToPage(el.dataset.page); closeMobileMenu(); };
 });
 document.getElementById("app").addEventListener("input", (e) => {
   if (e.target.classList && e.target.classList.contains("field-error")) {
@@ -2797,14 +2866,14 @@ function renderLoginScreen() {
 }
 
 async function handleLogin() {
-  const username = document.getElementById("loginUsername").value.trim();
+  const typedUsername = document.getElementById("loginUsername").value.trim();
   const password = document.getElementById("loginPassword").value;
   const statusEl = document.getElementById("loginStatus");
-  if (!username || !password) { statusEl.textContent = "Впишите логин и пароль."; return; }
+  if (!typedUsername || !password) { statusEl.textContent = "Впишите логин и пароль."; return; }
 
   statusEl.textContent = "Проверяю...";
   try {
-    const cred = await fbAuth.signInWithEmailAndPassword(loginToEmail(username), password);
+    const cred = await fbAuth.signInWithEmailAndPassword(loginToEmail(typedUsername), password);
     const profileSnap = await fbDb.collection("users").doc(cred.user.uid).get();
     if (!profileSnap.exists) {
       statusEl.textContent = "❌ Учётная запись есть, но нет профиля с правами доступа. Обратитесь к администратору.";
@@ -2812,6 +2881,12 @@ async function handleLogin() {
       return;
     }
     const profile = profileSnap.data();
+    // ВАЖНО: логин определяем из РЕАЛЬНОЙ почты аккаунта (cred.user.email),
+    // а не из того, что человек ввёл в поле - иначе при входе с другим
+    // регистром букв (напр. "Admin" вместо "admin") currentUser.username
+    // получался бы РАЗНЫМ в разных сессиях, и задачи, назначенные "на
+    // себя", переставали бы совпадать при сравнении на другом устройстве.
+    const username = cred.user.email.endsWith("@workspace.local") ? cred.user.email.replace("@workspace.local", "") : cred.user.email;
     currentUser = { uid: cred.user.uid, username, role: profile.role || "user", allowedSubsidies: profile.allowedSubsidies || "all", allowedPages: profile.allowedPages || "all" };
     showApp();
   } catch (err) {
