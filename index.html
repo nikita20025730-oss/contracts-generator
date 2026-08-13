@@ -80,15 +80,15 @@
   .sidebar { width: 232px; flex-shrink: 0; background: var(--sidebar-bg); color: var(--sidebar-text); padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--sidebar-border); display: flex; flex-direction: column; z-index: 100; transition: transform 0.2s; }
   .mobile-topbar { display: none; }
   @media (max-width: 760px) {
-    #appContainer { position: relative; }
-    .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); box-shadow: 4px 0 16px rgba(0,0,0,0.15); }
+    #appContainer { position: relative; flex-wrap: wrap; }
+    .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); box-shadow: 4px 0 16px rgba(0,0,0,0.15); z-index: 101; }
     .sidebar.open { transform: translateX(0); }
     .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 99; }
     .sidebar-overlay.open { display: block; }
-    .mobile-topbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--sidebar-bg); border-bottom: 1px solid var(--sidebar-border); position: sticky; top: 0; z-index: 50; }
+    .mobile-topbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--sidebar-bg); border-bottom: 1px solid var(--sidebar-border); position: fixed; top: 0; left: 0; right: 0; z-index: 50; width: 100%; box-sizing: border-box; }
     .mobile-topbar .hamburger { background: none; border: none; color: var(--sidebar-text-active); cursor: pointer; padding: 4px; display: flex; }
     .mobile-topbar .brand { font-weight: 700; color: var(--sidebar-text-active); font-size: 15px; }
-    .main { padding: 16px; }
+    .main { padding: 16px; padding-top: 68px; width: 100%; }
   }
   .sidebar h1 { font-size: 15px; font-weight: 700; padding: 0 20px 16px; margin: 0; border-bottom: 1px solid var(--sidebar-border); color: var(--sidebar-text-active); letter-spacing: -0.01em; }
   .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; font-size: 14px; color: var(--sidebar-text); border-left: 3px solid transparent; }
@@ -159,8 +159,9 @@
   .subsidy-block h3 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; }
   .project-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); border-radius: 16px; padding: 5px 12px; font-size: 12px; margin: 4px 6px 4px 0; cursor: pointer; color: var(--text); }
   .project-chip.selected { background: var(--accent); color: white; border-color: var(--accent); }
-  .budget-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
-  .budget-table th, .budget-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+  .budget-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 12px; }
+  .budget-table input, .budget-table select, .budget-table textarea { font-size: 11px !important; }
+  .budget-table th, .budget-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; vertical-align: top; }
   .budget-table th { background: var(--nav-hover); }
   .budget-table tr:hover { background: var(--nav-hover); }
   .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
@@ -732,7 +733,10 @@ function fillRowFromSmetaItem(row, config, smetaItem) {
 }
 
 async function openSmetaPickerModal(aIdx) {
-  const items = await loadGeneratorSmetaItems();
+  const allItems = await loadGeneratorSmetaItems();
+  // Строки "Итого"/"Всего" - служебные итоговые суммы, а не реальные
+  // позиции сметы, подбирать их как строку приложения не нужно.
+  const items = allItems.filter(it => !it._isMarkerRow);
   if (!items.length) {
     showModal("Позиции сметы", `<div class="hint">Не удалось найти позиции сметы для проекта «${state.bodyValues.project_name}». Проверьте, что смета загружается корректно в разделе «Учёт по смете».</div>`, async () => true);
     return;
@@ -1188,6 +1192,11 @@ function renderSmetaPage() {
     loadSection = `
     <div class="card card-wide">
       <h2>Данные проекта «${project.name}»</h2>
+      <div style="max-width:520px;margin-top:8px">
+        <label style="margin-top:0">Комментарий к проекту</label>
+        <textarea id="projectCommentInput" style="min-height:44px" placeholder="Необязательно">${project.comment || ""}</textarea>
+        <div id="projectCommentStatus" style="font-size:11px;color:var(--text-secondary);min-height:14px"></div>
+      </div>
       <div id="smetaLoadStatus" style="margin-top:4px;font-size:13px"></div>
       ${renderBudgetTable()}
     </div>`;
@@ -1281,6 +1290,18 @@ function renderBudgetTable() {
   const spans = computeColumnSpans(smetaState.loadedItems, columns);
 
   const rows = smetaState.loadedItems.map((item, idx) => {
+    if (item._isMarkerRow) {
+      // Строки "Итого"/"Всего" - показываем выделенным, нередактируемым
+      // рядом (не полем ввода), чтобы визуально сразу читалось как итог,
+      // а не как обычная позиция сметы.
+      const label = Object.values(item).find(v => v && String(v).trim() !== "" && !String(v).startsWith("_")) || "Итого";
+      const numericValues = columns.map(c => item[c]).filter(v => v && String(v).trim() !== "" && v !== label);
+      return `<tr style="background:var(--nav-hover);font-weight:700">
+        <td colspan="${Math.max(1, columns.length - numericValues.length)}">${label}</td>
+        ${numericValues.map(v => `<td>${v}</td>`).join("")}
+        <td></td>
+      </tr>`;
+    }
     const cells = columns.map(c => {
       const span = spans[idx][c];
       if (span.skip) return ""; // ячейка "поглощена" объединением выше
@@ -1315,6 +1336,17 @@ function attachSmetaHandlers() {
     smetaAutoRefreshedOnce = true;
     handleLoadBudget(true); // тихо обновляем в фоне то, что показали из кэша
   }
+  const commentInput = document.getElementById("projectCommentInput");
+  if (commentInput) commentInput.onchange = async () => {
+    const subsidy = findSubsidy(smetaState.selectedSubsidyId);
+    const project = findProject(subsidy, smetaState.selectedProjectId);
+    if (!project) return;
+    project.comment = commentInput.value;
+    const statusEl = document.getElementById("projectCommentStatus");
+    if (statusEl) statusEl.textContent = "Сохраняю...";
+    await saveSubsidies(subsidies);
+    if (statusEl) statusEl.textContent = "✅ Сохранено";
+  };
   document.querySelectorAll("[data-select-subsidy]").forEach(el => {
     el.onclick = () => {
       const id = el.dataset.selectSubsidy;
@@ -2142,7 +2174,8 @@ async function generateDocxFromTemplate(templateFile, data, fileNameBase, status
 let tasksCache = null; // массив задач, загруженных из Firestore
 let tasksLoaded = false;
 let knownListsCache = []; // [{ name, color, description }], загружено из Firestore
-let dashboardShowAll = false; // false = только мои задачи, true = все
+// (dashboardShowAll убран — "Мои списки" теперь всегда показывают все
+// задачи внутри своих списков, "Назначенные" — всегда только свои)
 
 const LIST_COLORS = ["#dc2626", "#ea580c", "#d97706", "#65a30d", "#059669", "#0891b2", "#2563eb", "#7c3aed", "#c026d3", "#6b7280"];
 
@@ -2223,13 +2256,51 @@ function todayRuFormatted() {
   const d = new Date();
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", weekday: "long" });
 }
+// Возвращает сегодняшнюю дату в формате YYYY-MM-DD - именно в этом формате
+// работает <input type="date">, поэтому храним даты в задачах так же, для
+// единообразия и удобного сравнения строками.
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+function isoToRuDate(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+// Сколько дней осталось до дедлайна (может быть отрицательным, если срок
+// уже прошёл). Считаем по календарным дням, не по часам, чтобы не путаться
+// с разницей во времени суток.
+function daysUntilDeadline(dueDateIso) {
+  if (!dueDateIso) return null;
+  const today = new Date(todayISO() + "T00:00:00");
+  const due = new Date(dueDateIso + "T00:00:00");
+  return Math.round((due - today) / 86400000);
+}
+// Подсветка строки задачи по близости дедлайна - чем ближе срок, тем
+// тревожнее цвет; дедлайн сегодня - красный.
+function deadlineHighlight(dueDateIso, status) {
+  if (!dueDateIso || status === "Готово") return null;
+  const days = daysUntilDeadline(dueDateIso);
+  if (days === 0) return { bg: "#fee2e2", tagBg: "#dc2626", tagColor: "#ffffff", label: "Сегодня срок" };
+  if (days === 1) return { bg: "#fed7aa", tagBg: "#f97316", tagColor: "#ffffff", label: "1 день" };
+  if (days === 2) return { bg: "#fef08a", tagBg: "#eab308", tagColor: "#78350f", label: "2 дня" };
+  if (days === 3) return { bg: "#fef9c3", tagBg: "#fde047", tagColor: "#78350f", label: "3 дня" };
+  return null;
+}
 
 function renderTaskRow(t, showListTag) {
   const list = knownListsCache.find(l => l.name === t.list);
   const sc = statusColor(t.status, list && list.color);
   const listTag = showListTag && list ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary)"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}</span>` : "";
-  return `<div class="task-row ${t.status==='Готово'?'task-done':''}">
+  const dl = deadlineHighlight(t.dueDate, t.status);
+  const rowStyle = dl ? `background:${dl.bg};border-radius:8px;padding-left:8px;padding-right:8px` : "";
+  const dueDisplay = t.status === "Готово" && t.completedAt
+    ? `<span title="Дата выполнения">✓ ${isoToRuDate(t.completedAt)}</span>`
+    : (t.dueDate ? `<span>${isoToRuDate(t.dueDate)}</span>` : "");
+  const deadlineTag = dl ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;background:${dl.tagBg};color:${dl.tagColor}">${dl.label}</span>` : "";
+  return `<div class="task-row ${t.status==='Готово'?'task-done':''}" style="${rowStyle}">
     <span class="status-badge" data-cycle-status="${t.id}" style="background:${sc.bg};color:${sc.color}">${t.status}</span>
+    ${deadlineTag}
     <div class="task-main">
       <div class="task-title">${t.title}</div>
       ${t.description ? `<div class="task-desc">${t.description}</div>` : ""}
@@ -2237,8 +2308,9 @@ function renderTaskRow(t, showListTag) {
     </div>
     <div class="task-meta">
       ${t.assignee ? `<span>${displayNameFor(t.assignee)}</span>` : ""}
-      ${t.dueDate ? `<span>${t.dueDate}</span>` : ""}
+      ${dueDisplay}
       <span class="today-toggle ${t.today ? 'on' : ''}" data-toggle-today="${t.id}" title="Сегодня"></span>
+      <button class="icon-btn" data-edit-task="${t.id}" title="Редактировать"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
       <button class="icon-btn" data-delete-task="${t.id}" title="Удалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>
     </div>
   </div>`;
@@ -2253,19 +2325,17 @@ function renderDashboardPage() {
   const allLists = [...knownListsCache, ...listsFromTasks.map(name => ({ name, color: LIST_COLORS[0], description: "", createdBy: null }))];
 
   // "Мои списки" - списки, которые создал сам пользователь (списки без
-  // createdBy - старые данные до этой доработки - показываем всем, чтобы
-  // ничего не потерялось).
+  // createdBy - старые данные, заведённые до этой доработки; их владельца
+  // можно назначить вручную в форме редактирования списка).
   const myLists = allLists.filter(l => !l.createdBy || sameUsername(l.createdBy, currentUser.username));
   // Чужие списки - нужны, чтобы найти в них задачи, назначенные на меня
   // (раздел "Назначенные").
   const otherLists = allLists.filter(l => l.createdBy && !sameUsername(l.createdBy, currentUser.username));
 
-  const visibleTasks = dashboardShowAll ? tasksCache : tasksCache.filter(t => sameUsername(t.assignee, currentUser.username));
   // Выполненные задачи ("Готово") автоматически уходят из "Сегодня" и из
   // обычных списков проекта - они видны только в архиве внизу страницы.
-  const activeTasks = visibleTasks.filter(t => t.status !== "Готово");
-  const archivedTasks = visibleTasks.filter(t => t.status === "Готово");
-  const todayTasks = activeTasks.filter(t => t.today);
+  const archivedTasks = tasksCache.filter(t => t.status === "Готово" && sameUsername(t.assignee, currentUser.username));
+  const todayTasks = tasksCache.filter(t => t.today && t.status !== "Готово" && sameUsername(t.assignee, currentUser.username));
 
   const renderListCard = (list, tasksInList, showAddButton) => {
     const rows = tasksInList.map(t => renderTaskRow(t, false)).join("");
@@ -2285,14 +2355,15 @@ function renderDashboardPage() {
     </div>`;
   };
 
+  // "Мои списки" - это МОИ проекты, поэтому внутри них видны ВСЕ задачи
+  // (кто угодно может быть исполнителем) - это же ваш собственный список,
+  // нужен полный обзор, а не только свои задачи в нём.
   const myListBlocks = myLists.map(list => {
-    const tasksInList = visibleTasks.filter(t => t.list === list.name && t.status !== "Готово");
+    const tasksInList = tasksCache.filter(t => t.list === list.name && t.status !== "Готово");
     return renderListCard(list, tasksInList, true);
   }).join("");
 
-  // "Назначенные" - задачи из ЧУЖИХ списков, назначенные на меня. Не
-  // зависит от переключателя "показать всех", поскольку по смыслу это
-  // всегда "мои" задачи, просто в чужом списке.
+  // "Назначенные" - задачи из ЧУЖИХ списков, назначенные на меня.
   const assignedTasks = tasksCache.filter(t =>
     t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) &&
     otherLists.some(l => l.name === t.list)
@@ -2306,6 +2377,15 @@ function renderDashboardPage() {
   <div class="list-card" style="border-left-color:var(--border-strong);margin-top:16px">
     <div class="list-card-title" style="margin-bottom:8px">Архив выполненных</div>
     ${archivedTasks.length ? archivedTasks.map(t => renderTaskRow(t, true)).join("") : `<div class="hint">Архив пуст.</div>`}
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <label style="margin-top:0">Выгрузить отчёт за период</label>
+      <div class="row2">
+        <div><label>С</label><input type="date" id="reportPeriodFrom"></div>
+        <div><label>По</label><input type="date" id="reportPeriodTo"></div>
+      </div>
+      <button class="btn btn-primary btn-small" style="margin-top:10px" id="exportReportBtn">Скачать отчёт (Word)</button>
+      <div id="exportReportStatus" style="margin-top:8px;font-size:12px"></div>
+    </div>
   </div>` : "";
 
   return `
@@ -2323,14 +2403,61 @@ function renderDashboardPage() {
 
   ${assignedBlock ? `<h3 style="margin-top:24px">Назначенные</h3><div class="board-grid">${assignedBlock}</div>` : ""}
 
-  <div class="dashboard-footer-bar">
-    <div class="checkbox-row" style="margin-top:0">
-      <input type="checkbox" id="dashboardShowAllCheck" ${dashboardShowAll ? "checked" : ""}>
-      <label for="dashboardShowAllCheck">Показать задачи всех пользователей</label>
-    </div>
+  <div class="dashboard-footer-bar" style="justify-content:flex-end">
     <button class="btn btn-secondary btn-small" id="toggleArchiveBtn">${dashboardShowArchive ? "Скрыть архив" : `Архив (${archivedTasks.length})`}</button>
   </div>
   ${archiveSection}`;
+}
+
+function taskFormModalHtml(task) {
+  return `
+    <label class="required">Название задачи</label>
+    <input type="text" id="modalTaskTitle" value="${(task.title||'').replace(/"/g,'&quot;')}">
+    <label>Описание</label>
+    <textarea id="modalTaskDesc" style="min-height:50px">${task.description||''}</textarea>
+    <label class="required">Исполнитель</label>
+    <select id="modalTaskAssignee">${assigneeOptionsHtml(task.assignee || currentUser.username)}</select>
+    <label>Срок</label>
+    <input type="date" id="modalTaskDueDate" value="${task.dueDate||''}">
+    <label>Статус</label>
+    <select id="modalTaskStatus">${TASK_STATUSES.map(s => `<option ${s===(task.status||"Не начато")?"selected":""}>${s}</option>`).join("")}</select>
+    <div class="checkbox-row"><input type="checkbox" id="modalTaskToday" ${task.today?'checked':''}><label for="modalTaskToday">Добавить в «Сегодня»</label></div>
+  `;
+}
+
+async function handleExportTasksReport() {
+  const statusEl = document.getElementById("exportReportStatus");
+  const from = document.getElementById("reportPeriodFrom").value;
+  const to = document.getElementById("reportPeriodTo").value;
+  if (!from || !to) { statusEl.textContent = "⚠️ Укажите обе даты периода."; return; }
+
+  const completed = tasksCache.filter(t =>
+    t.status === "Готово" && t.completedAt && t.completedAt >= from && t.completedAt <= to &&
+    sameUsername(t.assignee, currentUser.username)
+  );
+  if (!completed.length) {
+    statusEl.textContent = "⚠️ За выбранный период нет выполненных задач, назначенных на вас.";
+    return;
+  }
+
+  // Группируем по списку - порядок списков берём из знакомых списков
+  // (стабильнее, чем порядок появления в массиве задач).
+  const listsInReport = [...new Set(completed.map(t => t.list))];
+  const lists = listsInReport.map(listName => ({
+    list_name: listName,
+    tasks: completed
+      .filter(t => t.list === listName)
+      .sort((a, b) => a.completedAt.localeCompare(b.completedAt))
+      .map(t => ({ task_title: t.title, completed_date: isoToRuDate(t.completedAt) })),
+  }));
+
+  const data = {
+    period: `${isoToRuDate(from)} — ${isoToRuDate(to)}`,
+    employee_name: displayNameFor(currentUser.username),
+    lists,
+  };
+
+  await generateDocxFromTemplate("Шаблон_Отчёт_по_задачам.docx", data, `Отчёт_${currentUser.username}_${from}_${to}`, statusEl);
 }
 
 function attachDashboardHandlers() {
@@ -2373,52 +2500,84 @@ function attachDashboardHandlers() {
     btn.onclick = () => {
       const list = knownListsCache.find(l => l.name === btn.dataset.editList);
       let selectedColor = list.color;
+      const ownerOptions = usersDirectoryCache.map(u =>
+        `<option value="${u.username}" ${u.username===(list.createdBy||currentUser.username)?'selected':''}>${u.fullName || u.username}</option>`
+      ).join("");
       showModal("Изменить список", `
         <label>Название</label>
         <input type="text" id="modalListName" value="${list.name}" disabled style="opacity:0.6">
         <label>Краткое описание</label>
         <input type="text" id="modalListDesc" value="${list.description||''}">
+        <label>Владелец списка</label>
+        <select id="modalListOwner">${ownerOptions}</select>
+        <div class="hint">У старых списков владелец не был указан — выберите здесь, чтобы список верно попадал в «Мои списки»/«Назначенные».</div>
         <label>Цвет</label>
         ${colorPickerHtml(selectedColor)}
+        <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border)">
+          <button type="button" class="btn-danger-text" id="modalDeleteListBtn">Удалить список</button>
+        </div>
       `, async () => {
         const description = document.getElementById("modalListDesc").value.trim();
-        await updateKnownList(list.name, { color: selectedColor, description });
+        const createdBy = document.getElementById("modalListOwner").value;
+        await updateKnownList(list.name, { color: selectedColor, description, createdBy });
         renderApp();
         return true;
       });
       wireColorPicker(() => selectedColor, (c) => { selectedColor = c; });
+      document.getElementById("modalDeleteListBtn").onclick = async () => {
+        if (!confirm(`Удалить список «${list.name}»? Задачи внутри него останутся в базе, но список исчезнет из дашборда.`)) return;
+        knownListsCache = knownListsCache.filter(l => l.name !== list.name);
+        await saveKnownLists();
+        closeModal();
+        renderApp();
+      };
     };
   });
 
-  document.getElementById("dashboardShowAllCheck").onchange = (e) => { dashboardShowAll = e.target.checked; renderApp(); };
+  // (обработчик для dashboardShowAllCheck убран вместе с самим чекбоксом)
   document.getElementById("toggleArchiveBtn").onclick = () => { dashboardShowArchive = !dashboardShowArchive; renderApp(); };
+  const exportReportBtn = document.getElementById("exportReportBtn");
+  if (exportReportBtn) exportReportBtn.onclick = handleExportTasksReport;
 
   document.querySelectorAll("[data-add-task-to-list]").forEach(btn => {
     btn.onclick = () => {
       const listName = btn.dataset.addTaskToList;
-      showModal("Новая задача", `
-        <label class="required">Название задачи</label>
-        <input type="text" id="modalTaskTitle">
-        <label>Описание</label>
-        <textarea id="modalTaskDesc" style="min-height:50px"></textarea>
-        <label class="required">Исполнитель</label>
-        <select id="modalTaskAssignee">${assigneeOptionsHtml(currentUser.username)}</select>
-        <label>Срок</label>
-        <input type="text" id="modalTaskDueDate" placeholder="напр. 20.08.2026">
-        <label>Статус</label>
-        <select id="modalTaskStatus">${TASK_STATUSES.map(s => `<option ${s==="Не начато"?"selected":""}>${s}</option>`).join("")}</select>
-        <div class="checkbox-row"><input type="checkbox" id="modalTaskToday"><label for="modalTaskToday">Добавить в «Сегодня»</label></div>
-      `, async () => {
+      showModal("Новая задача", taskFormModalHtml({}), async () => {
         const title = document.getElementById("modalTaskTitle").value.trim();
         if (!title) return false;
         const description = document.getElementById("modalTaskDesc").value.trim();
         const assignee = document.getElementById("modalTaskAssignee").value || currentUser.username;
-        const dueDate = document.getElementById("modalTaskDueDate").value.trim();
+        const dueDate = document.getElementById("modalTaskDueDate").value;
         const status = document.getElementById("modalTaskStatus").value;
         const today = document.getElementById("modalTaskToday").checked;
         const id = "t_" + Date.now();
-        const task = { id, list: listName, title, description, assignee, status, dueDate, today };
+        const task = { id, list: listName, title, description, assignee, status, dueDate, today, completedAt: status === "Готово" ? todayISO() : null };
         tasksCache.push(task);
+        renderApp();
+        const { id: _drop, ...taskData } = task;
+        await fbDb.collection("tasks").doc(id).set(taskData);
+        return true;
+      });
+    };
+  });
+
+  document.querySelectorAll("[data-edit-task]").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.editTask;
+      const task = tasksCache.find(t => t.id === id);
+      if (!task) return;
+      showModal("Изменить задачу", taskFormModalHtml(task), async () => {
+        const title = document.getElementById("modalTaskTitle").value.trim();
+        if (!title) return false;
+        task.title = title;
+        task.description = document.getElementById("modalTaskDesc").value.trim();
+        task.assignee = document.getElementById("modalTaskAssignee").value || task.assignee;
+        task.dueDate = document.getElementById("modalTaskDueDate").value;
+        const newStatus = document.getElementById("modalTaskStatus").value;
+        if (newStatus === "Готово" && task.status !== "Готово") task.completedAt = todayISO();
+        else if (newStatus !== "Готово") task.completedAt = null;
+        task.status = newStatus;
+        task.today = document.getElementById("modalTaskToday").checked;
         renderApp();
         const { id: _drop, ...taskData } = task;
         await fbDb.collection("tasks").doc(id).set(taskData);
@@ -2433,8 +2592,14 @@ function attachDashboardHandlers() {
       const task = tasksCache.find(t => t.id === id);
       if (!task) return;
       task.status = nextStatus(task.status);
+      // Фиксируем дату выполнения при переходе в "Готово" - нужна для
+      // отчёта по выполненным задачам за период. Если статус меняют
+      // обратно (например, по ошибке отметили готовым) - дату убираем.
+      const update = { status: task.status };
+      if (task.status === "Готово") { task.completedAt = todayISO(); update.completedAt = task.completedAt; }
+      else if (task.completedAt) { task.completedAt = null; update.completedAt = null; }
       renderApp();
-      await fbDb.collection("tasks").doc(id).update({ status: task.status });
+      await fbDb.collection("tasks").doc(id).update(update);
     };
   });
 
