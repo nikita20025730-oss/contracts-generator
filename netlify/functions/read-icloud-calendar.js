@@ -12,6 +12,10 @@
 // 2. В Netlify -> Site configuration -> Environment variables добавить:
 //      ICLOUD_APPLE_ID       - ваш Apple ID (email)
 //      ICLOUD_APP_PASSWORD   - пароль для приложений из шага 1
+//      ICLOUD_CALENDAR_NAME  - необязательно; если задать точное название
+//                              календаря (напр. "Работа"), события будут
+//                              браться только из него. Если не задавать -
+//                              берутся события из ВСЕХ ваших календарей.
 //
 // Модуль tsdav нужно установить в package.json (npm install tsdav node-ical).
 
@@ -56,10 +60,27 @@ exports.handler = async (event) => {
 
     const calendars = await client.fetchCalendars();
 
-    // Собираем события из ВСЕХ календарей пользователя (обычно "Домашний",
-    // "Работа" и т.п. - без предположений о конкретных названиях).
+    // Если задана переменная ICLOUD_CALENDAR_NAME - берём события только из
+    // календаря с таким названием (например, "Работа"), а не из всех
+    // календарей пользователя. Сравнение без учёта регистра.
+    const onlyCalendarName = process.env.ICLOUD_CALENDAR_NAME;
+    const calendarsToRead = onlyCalendarName
+      ? calendars.filter((c) => (c.displayName || "").toLowerCase() === onlyCalendarName.toLowerCase())
+      : calendars;
+
+    if (onlyCalendarName && calendarsToRead.length === 0) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          events: [],
+          warning: `Календарь с названием "${onlyCalendarName}" не найден. Доступные календари: ${calendars.map((c) => c.displayName).join(", ")}`,
+        }),
+      };
+    }
+
     const allEvents = [];
-    for (const calendar of calendars) {
+    for (const calendar of calendarsToRead) {
       let objects;
       try {
         objects = await client.fetchCalendarObjects({
