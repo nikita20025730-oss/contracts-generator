@@ -2388,15 +2388,17 @@ function renderDashboardPage() {
 
   const allLists = getAllListsWithOwners();
 
-  const hiddenListsCount = allLists.filter(l => l.hidden).length;
-  const hiddenTasksCount = tasksCache.filter(t => t.hidden).length;
+  // ВАЖНО: счётчик "скрытых" должен считать только то, что переключатель
+  // "Показать скрытые" реально способен раскрыть - то есть СВОИ списки
+  // (чужой список не появится в "Мои списки" никогда, вне зависимости от
+  // скрытия, и у него даже нет кнопки редактирования на этом экране).
+  // Раньше счётчик включал скрытые списки ВСЕХ пользователей, поэтому
+  // кнопка показывала "(1)" и переключалась, но ничего не раскрывалось -
+  // если тот единственный скрытый список принадлежал не вам.
+  const ownedLists = getMyOwnedLists(); // для проверки владения (архив, отчёт, счётчик скрытых) - без учёта "скрыт"
+  const hiddenListsCount = ownedLists.filter(l => l.hidden).length;
+  const hiddenTasksCount = tasksCache.filter(t => t.hidden && (sameUsername(t.assignee, currentUser.username) || ownedLists.some(l => l.name === t.list))).length;
 
-  // ВАЖНО: "владение" списком (кто его создал) и "показывать ли карточкой
-  // на дашборде" - это ДВЕ РАЗНЫЕ вещи. Раньше они были смешаны в одном
-  // фильтре, из-за чего скрытый список переставал считаться "моим" даже
-  // для архива/отчёта - хотя скрытие должно влиять только на то, видна ли
-  // карточка списка, а не на то, чьи в нём задачи.
-  const ownedLists = getMyOwnedLists(); // для проверки владения (архив, отчёт) - без учёта "скрыт"
   // Список карточек ("Мои списки"), которые реально показываются на экране
   // - скрытые убираем, пока не включена кнопка "Показать скрытые".
   const myLists = ownedLists.filter(l => dashboardShowHidden || !l.hidden);
@@ -2851,7 +2853,7 @@ function renderStep5() {
   const grant = GRANTS[state.grantId];
   let payload = null, buildError = null;
   try { payload = buildPayload(state, config, grant); } catch (e) { buildError = e.message; }
-  const rows = [["Тип договора",config.label],["Грант",grant.label],["Номер / дата",`${state.contractNumber} от ${state.contractDate}`],["Контрагент",state.contractor.contractor_full_name||"—"],["Сумма (авто)",formatRuNumber(computeContractTotalRub(state, config))+" руб."],["Приложений",config.appendixCount]];
+  const rows = [["Тип договора",config.label],["Грант",grant.label],["Номер / дата",`${state.contractNumber} от ${state.contractDate}`],["Контрагент",state.contractor.contractor_full_name||"—"],["Сумма (авто)",formatRuNumber(computeContractTotalRub(state, config))+" руб."],["Приложений",`${state.appendices.length} (в договор попадёт именно столько)`]];
   return `<div class="card"><h2>Шаг 5 — Проверка и генерация</h2>
   <table class="review-table">${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("")}</table>
   ${buildError?`<div class="warning-box">⚠️ ${buildError}</div>`:""}
