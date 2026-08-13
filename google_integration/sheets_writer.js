@@ -5,18 +5,25 @@
 
 const { google } = require("googleapis");
 const { getAuthClient } = require("./google_auth");
-const { normalizeHeader } = require("./sheets_reader");
+const { normalizeHeader, detectHeaderRowIndex } = require("./sheets_reader");
 
 /**
  * Находит номер столбца (буква A, B, C...) по тексту заголовка на листе.
  * Нужно, т.к. позиции колонок различаются между листами (см. sheets_reader.js).
+ *
+ * ВАЖНО: строка заголовков определяется ТЕМ ЖЕ способом, что и при чтении
+ * (detectHeaderRowIndex) - раньше здесь было жёстко зашито "заголовки в
+ * строке 3", из-за чего запись молча не работала на листах с другой
+ * структурой (напр. ВКМП, где заголовки на строке 2).
  */
 async function findColumnLetter(sheets, spreadsheetId, sheetName, headerText) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${sheetName}!A3:AA3`, // строка заголовков
+    range: `${sheetName}!A1:AA10`, // с запасом - detectHeaderRowIndex сам найдёт нужную строку
   });
-  const headerRow = (res.data.values && res.data.values[0]) || [];
+  const rows = res.data.values || [];
+  const headerRowIndex = detectHeaderRowIndex(rows);
+  const headerRow = rows[headerRowIndex] || [];
   const idx = headerRow.findIndex((h) => normalizeHeader(h) === normalizeHeader(headerText));
   if (idx === -1) return null;
   return columnIndexToLetter(idx);

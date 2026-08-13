@@ -33,6 +33,41 @@ function columnIndexToLetter(index) {
   return letter;
 }
 
+// Определяет строку заголовков динамически: сначала ищем среди первых 10
+// строк ту, где первая ячейка содержит одну из известных подписей
+// заголовка ("Статья расходов", "Наименование расходов" и т.п.) - это
+// надёжнее, чем просто "больше всего заполненных ячеек", потому что у
+// некоторых смет сама строка заголовков содержит объединённые (то есть
+// формально пустые) ячейки, и тогда обычная строка с данными может
+// ошибочно выглядеть "более заполненной", чем настоящие заголовки.
+// Экспортируется отдельно, чтобы sheets_writer.js искал заголовки ТЕМ ЖЕ
+// способом, что и здесь - иначе чтение и запись могут разойтись в том,
+// какую строку считать заголовком.
+function detectHeaderRowIndex(rows) {
+  const HEADER_KEYWORDS = [/^статья расходов/i, /^наименование расходов/i, /^наименование$/i];
+  const scanLimit = Math.min(10, rows.length);
+  for (let i = 0; i < scanLimit; i++) {
+    const row = rows[i] || [];
+    const firstCell = normalizeHeader(row[0]);
+    if (HEADER_KEYWORDS.some((re) => re.test(firstCell))) {
+      return i;
+    }
+  }
+  // Запасной вариант, если ни одна из известных подписей не нашлась -
+  // эвристика "строка с максимумом заполненных ячеек".
+  let headerRowIndex = 2; // конечный запасной вариант - строка 3, как было раньше
+  let maxFilledCells = -1;
+  for (let i = 0; i < scanLimit; i++) {
+    const row = rows[i] || [];
+    const filledCount = row.filter((cell) => cell && String(cell).trim() !== "").length;
+    if (filledCount > maxFilledCells) {
+      maxFilledCells = filledCount;
+      headerRowIndex = i;
+    }
+  }
+  return headerRowIndex;
+}
+
 /**
  * Читает один лист сметы (напр. "ТОЧКА" или "НИТЬ КУЛЬТУРЫ") и возвращает
  * массив строк в виде объектов { colName: value }, с добавленным полем
@@ -59,37 +94,7 @@ async function readBudgetSheet(spreadsheetId, sheetName) {
     throw new Error(`Лист "${sheetName}" пуст или короче ожидаемого (меньше 4 строк).`);
   }
 
-  // Определяем строку заголовков динамически: сначала ищем среди первых 10
-  // строк ту, где первая ячейка содержит одну из известных подписей
-  // заголовка ("Статья расходов", "Наименование расходов" и т.п.) - это
-  // надёжнее, чем просто "больше всего заполненных ячеек", потому что у
-  // некоторых смет сама строка заголовков содержит объединённые (то есть
-  // формально пустые) ячейки, и тогда обычная строка с данными может
-  // ошибочно выглядеть "более заполненной", чем настоящие заголовки.
-  const HEADER_KEYWORDS = [/^статья расходов/i, /^наименование расходов/i, /^наименование$/i];
-  let headerRowIndex = -1;
-  const scanLimit = Math.min(10, rows.length);
-  for (let i = 0; i < scanLimit; i++) {
-    const row = rows[i] || [];
-    const firstCell = normalizeHeader(row[0]);
-    if (HEADER_KEYWORDS.some((re) => re.test(firstCell))) {
-      headerRowIndex = i;
-      break;
-    }
-  }
-  // Запасной вариант, если ни одна из известных подписей не нашлась -
-  // прежняя эвристика "строка с максимумом заполненных ячеек".
-  if (headerRowIndex === -1) {
-    let maxFilledCells = -1;
-    for (let i = 0; i < scanLimit; i++) {
-      const row = rows[i] || [];
-      const filledCount = row.filter((cell) => cell && String(cell).trim() !== "").length;
-      if (filledCount > maxFilledCells) {
-        maxFilledCells = filledCount;
-        headerRowIndex = i;
-      }
-    }
-  }
+  const headerRowIndex = detectHeaderRowIndex(rows);
 
   const headerRow = (rows[headerRowIndex] || []).map(normalizeHeader);
 
@@ -163,4 +168,4 @@ async function readBudgetItemsForContracting(spreadsheetId, sheetName, { include
   });
 }
 
-module.exports = { readBudgetSheet, readBudgetItemsForContracting, normalizeHeader };
+module.exports = { readBudgetSheet, readBudgetItemsForContracting, normalizeHeader, detectHeaderRowIndex };
