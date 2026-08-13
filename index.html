@@ -99,6 +99,9 @@
   label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; margin-top: 12px; color: var(--text); }
   label.required::after { content: " *"; color: var(--accent); }
   input[type=text], input[type=number], input[type=password], select, textarea { width: 100%; padding: 9px 10px; font-size: 14px; border: 1px solid var(--border-strong); border-radius: 8px; font-family: inherit; background: var(--input-bg); color: var(--text); }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; }
+  select option { background: var(--card-bg); color: var(--text); }
   textarea { min-height: 60px; resize: vertical; }
   .hint { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -146,11 +149,13 @@
   .month-cell label { margin-top: 0; font-size: 12px; }
 
   /* --- Дашборд --- */
-  .today-banner { display: flex; align-items: baseline; justify-content: space-between; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; box-shadow: var(--shadow); }
-  .today-banner .today-label { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
-  .today-banner .today-date { font-size: 14px; color: var(--text-secondary); }
+  .today-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .today-card-header { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .today-card .today-label { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .today-card .today-date { font-size: 14px; color: var(--text-secondary); text-transform: capitalize; }
   .task-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .task-row:last-child { border-bottom: none; }
+  .task-row.task-done .task-title { color: var(--text-secondary); text-decoration: line-through; }
   .task-main { flex: 1; min-width: 0; }
   .task-title { font-size: 14px; }
   .task-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
@@ -159,7 +164,9 @@
   .today-toggle.on { background: var(--accent); }
   .today-toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: left 0.15s; }
   .today-toggle.on::after { left: 16px; }
-  .list-card { border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; background: var(--card-bg); border: 1px solid var(--border); border-left-width: 4px; box-shadow: var(--shadow); }
+  .board-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .board-grid { grid-template-columns: 1fr; } }
+  .list-card { border-radius: 12px; padding: 18px 20px; background: var(--card-bg); border: 1px solid var(--border); border-left-width: 4px; box-shadow: var(--shadow); }
   .list-card-header { display: flex; align-items: center; justify-content: space-between; }
   .list-card-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
   .list-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
@@ -167,6 +174,8 @@
   .color-swatches { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
   .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
   .color-swatch.selected { border-color: var(--text); }
+  .status-badge { display: inline-block; padding: 3px 9px; border-radius: 11px; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+  .dashboard-footer-bar { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
   .icon-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px; display: flex; }
   .icon-btn:hover { color: var(--text); }
 </style>
@@ -559,6 +568,21 @@ const CUSTOMER_FIELD_LABELS = [
   { name: "signatory_initials_reversed", label: "Подпись — обратный порядок («Фамилия И.О.», для приложений)" },
 ];
 
+// Справочник пользователей (логин + Фамилия Имя) - отдельная, менее
+// чувствительная коллекция от "users" (там же роль и права доступа),
+// читать может любой вошедший - нужен для выбора исполнителя в задачах.
+let usersDirectoryCache = [];
+let usersDirectoryLoaded = false;
+async function loadUsersDirectory() {
+  try {
+    const snap = await fbDb.collection("userDirectory").get();
+    usersDirectoryCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+  } catch (e) {
+    usersDirectoryCache = [];
+  }
+  usersDirectoryLoaded = true;
+}
+
 function renderSettings() {
   const cards = Object.keys(CUSTOMERS_DEFAULT).map(key => {
     const customer = getCustomer(key);
@@ -595,7 +619,18 @@ function renderSettings() {
     </div>`;
   }).join("");
 
+  const myEntry = usersDirectoryCache.find(u => u.uid === currentUser.uid);
+  const myProfileCard = `
+  <div class="card" style="margin-bottom:24px">
+    <h2>Мой профиль</h2>
+    <label>Фамилия Имя</label>
+    <input type="text" id="myFullNameInput" value="${(myEntry && myEntry.fullName) || ''}" placeholder="Как вас будут видеть коллеги в списке задач">
+    <button class="btn btn-primary btn-small" style="margin-top:10px" id="saveMyFullNameBtn">Сохранить</button>
+    <div id="myFullNameStatus" style="margin-top:8px;font-size:12px"></div>
+  </div>`;
+
   return `
+  ${myProfileCard}
   <div class="hint" style="margin-bottom:16px">Эти реквизиты подставляются в договор автоматически при выборе гранта на Шаге 1. Изменения сохраняются в этом браузере и применяются ко всем новым договорам.</div>
   ${cards}
   <div class="nav-buttons">
@@ -618,21 +653,30 @@ function renderUserManagementCard() {
       <input type="checkbox" data-new-user-subsidy="${s.id}" style="width:auto"> ${s.name}
     </label>`).join("");
   const pageCheckboxes = [
-    ["generator", "📄 Генератор договоров"], ["smeta", "📊 Учёт по смете"],
-    ["planning", "💰 Планирование расходов"], ["settings", "⚙ Настройки"],
+    ["dashboard", "Дашборд"], ["generator", "Генератор договоров"], ["smeta", "Учёт по смете"],
+    ["planning", "Планирование расходов"], ["documents", "Закрывающие документы"], ["settings", "Настройки"],
   ].map(([key, label]) => `
     <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin-top:6px">
       <input type="checkbox" data-new-user-page="${key}" style="width:auto"> ${label}
     </label>`).join("");
 
+  const usersListHtml = usersDirectoryCache.map(u => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1"><b>${u.fullName || u.username}</b> <span class="hint">(${u.username})</span></div>
+      <input type="text" data-edit-user-fullname="${u.uid}" value="${u.fullName||''}" placeholder="Фамилия Имя" style="max-width:220px">
+      <button class="btn btn-secondary btn-small" data-save-user-fullname="${u.uid}">Сохранить</button>
+    </div>`).join("");
+
   return `
   <div class="card" style="margin-top:24px">
     <h2>Пользователи</h2>
-    <div class="hint" style="margin-bottom:16px">Ссылка на таблицу пользователей: та же, что вы указали при входе. Новый пользователь сможет войти с этим логином и паролем сразу после создания.</div>
+    <div class="hint" style="margin-bottom:16px">Новый пользователь сможет войти с этим логином и паролем сразу после создания.</div>
     <div class="row2">
       <div><label class="required">Логин</label><input type="text" id="newUserUsername"></div>
       <div><label class="required">Пароль</label><input type="text" id="newUserPassword" placeholder="Придумайте и сообщите коллеге"></div>
     </div>
+    <label>Фамилия Имя</label>
+    <input type="text" id="newUserFullName" placeholder="Например, Иванова Мария">
     <label style="margin-top:14px">Роль</label>
     <select id="newUserRole">
       <option value="user">Обычный пользователь (ограниченный доступ)</option>
@@ -648,6 +692,9 @@ function renderUserManagementCard() {
     </div>
     <button class="btn btn-primary" style="margin-top:16px" id="createUserBtn">Создать пользователя</button>
     <div id="createUserStatus" style="margin-top:10px;font-size:13px"></div>
+
+    <h3>Существующие пользователи</h3>
+    ${usersListHtml || '<div class="hint">Пока никого, кроме вас.</div>'}
   </div>`;
 }
 
@@ -658,6 +705,9 @@ function extractSpreadsheetId(urlOrId) {
 }
 
 function attachSettingsHandlers() {
+  if (!usersDirectoryLoaded) {
+    loadUsersDirectory().then(() => { if (currentPage === "settings") renderApp(); });
+  }
   document.querySelectorAll("[data-reset-customer]").forEach(btn => {
     btn.onclick = () => {
       const key = btn.dataset.resetCustomer;
@@ -731,12 +781,39 @@ function attachSettingsHandlers() {
   if (allPagesEl) allPagesEl.onchange = () => { document.getElementById("newUserPageList").style.display = allPagesEl.checked ? "none" : "block"; };
   const createUserBtn = document.getElementById("createUserBtn");
   if (createUserBtn) createUserBtn.onclick = handleCreateUser;
+  const saveMyNameBtn = document.getElementById("saveMyFullNameBtn");
+  if (saveMyNameBtn) saveMyNameBtn.onclick = async () => {
+    const statusEl = document.getElementById("myFullNameStatus");
+    const fullName = document.getElementById("myFullNameInput").value.trim();
+    statusEl.textContent = "Сохраняю...";
+    try {
+      await fbDb.collection("userDirectory").doc(currentUser.uid).set({ username: currentUser.username, fullName }, { merge: true });
+      const entry = usersDirectoryCache.find(u => u.uid === currentUser.uid);
+      if (entry) entry.fullName = fullName; else usersDirectoryCache.push({ uid: currentUser.uid, username: currentUser.username, fullName });
+      statusEl.textContent = "✅ Сохранено";
+    } catch (err) {
+      statusEl.textContent = "❌ " + err.message;
+    }
+  };
+  document.querySelectorAll("[data-save-user-fullname]").forEach(btn => {
+    btn.onclick = async () => {
+      const uid = btn.dataset.saveUserFullname;
+      const input = document.querySelector(`[data-edit-user-fullname="${uid}"]`);
+      const fullName = input.value.trim();
+      await fbDb.collection("userDirectory").doc(uid).update({ fullName });
+      const entry = usersDirectoryCache.find(u => u.uid === uid);
+      if (entry) entry.fullName = fullName;
+      btn.textContent = "Сохранено ✓";
+      setTimeout(() => { btn.textContent = "Сохранить"; }, 1200);
+    };
+  });
 }
 
 async function handleCreateUser() {
   const statusEl = document.getElementById("createUserStatus");
   const username = document.getElementById("newUserUsername").value.trim();
   const password = document.getElementById("newUserPassword").value;
+  const fullName = document.getElementById("newUserFullName").value.trim();
   const role = document.getElementById("newUserRole").value;
   if (!username || !password) { statusEl.textContent = "⚠️ Впишите логин и пароль."; return; }
   if (password.length < 6) { statusEl.textContent = "⚠️ Пароль должен быть не короче 6 символов (требование Firebase)."; return; }
@@ -762,11 +839,14 @@ async function handleCreateUser() {
     await fbDb.collection("users").doc(cred.user.uid).set({
       username, role, allowedSubsidies, allowedPages, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
+    await fbDb.collection("userDirectory").doc(cred.user.uid).set({ username, fullName });
+    usersDirectoryCache.push({ uid: cred.user.uid, username, fullName });
     await secondaryApp.auth().signOut();
     await secondaryApp.delete();
     statusEl.textContent = "✅ Пользователь создан. Сообщите коллеге логин и пароль.";
     document.getElementById("newUserUsername").value = "";
     document.getElementById("newUserPassword").value = "";
+    document.getElementById("newUserFullName").value = "";
   } catch (err) {
     await secondaryApp.delete();
     if (err.code === "auth/email-already-in-use") {
@@ -1806,7 +1886,18 @@ async function loadTasks() {
     tasksCache = [];
   }
   await loadKnownLists();
+  if (!usersDirectoryLoaded) await loadUsersDirectory();
   tasksLoaded = true;
+}
+
+function displayNameFor(username) {
+  const entry = usersDirectoryCache.find(u => u.username === username);
+  return (entry && entry.fullName) ? entry.fullName : username;
+}
+function assigneeOptionsHtml(selected) {
+  return usersDirectoryCache.map(u =>
+    `<option value="${u.username}" ${u.username===selected?'selected':''}>${u.fullName || u.username}</option>`
+  ).join("");
 }
 
 const TASK_STATUSES = ["Не начато", "В работе", "Готово"];
@@ -1814,10 +1905,15 @@ function nextStatus(status) {
   const idx = TASK_STATUSES.indexOf(status);
   return TASK_STATUSES[(idx + 1) % TASK_STATUSES.length];
 }
-function statusColor(status) {
-  if (status === "Готово") return { bg: "#d1fae5", color: "#047857" };
-  if (status === "В работе") return { bg: "#dbeafe", color: "#1e40af" };
+function statusColor(status, listColor) {
+  if (status === "Готово") return { bg: "var(--nav-hover)", color: "var(--text-secondary)" };
+  if (status === "В работе") return { bg: hexToRgba(listColor || "#2563eb", 0.15), color: listColor || "#2563eb" };
   return { bg: "var(--nav-hover)", color: "var(--text-secondary)" };
+}
+function hexToRgba(hex, alpha) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 function todayRuFormatted() {
   const d = new Date();
@@ -1825,24 +1921,26 @@ function todayRuFormatted() {
 }
 
 function renderTaskRow(t, showListTag) {
-  const sc = statusColor(t.status);
   const list = knownListsCache.find(l => l.name === t.list);
+  const sc = statusColor(t.status, list && list.color);
   const listTag = showListTag && list ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary)"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}</span>` : "";
-  return `<div class="task-row">
-    <span data-cycle-status="${t.id}" style="cursor:pointer;display:inline-block;padding:3px 9px;border-radius:11px;font-size:11px;font-weight:600;background:${sc.bg};color:${sc.color};flex-shrink:0">${t.status}</span>
+  return `<div class="task-row ${t.status==='Готово'?'task-done':''}">
+    <span class="status-badge" data-cycle-status="${t.id}" style="background:${sc.bg};color:${sc.color}">${t.status}</span>
     <div class="task-main">
       <div class="task-title">${t.title}</div>
       ${t.description ? `<div class="task-desc">${t.description}</div>` : ""}
       ${listTag ? `<div style="margin-top:4px">${listTag}</div>` : ""}
     </div>
     <div class="task-meta">
-      ${t.assignee ? `<span>${t.assignee}</span>` : ""}
+      ${t.assignee ? `<span>${displayNameFor(t.assignee)}</span>` : ""}
       ${t.dueDate ? `<span>${t.dueDate}</span>` : ""}
       <span class="today-toggle ${t.today ? 'on' : ''}" data-toggle-today="${t.id}" title="Сегодня"></span>
       <button class="icon-btn" data-delete-task="${t.id}" title="Удалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>
     </div>
   </div>`;
 }
+
+let dashboardShowArchive = false;
 
 function renderDashboardPage() {
   if (!tasksLoaded) return `<div class="card"><h2>Дашборд</h2><div class="hint">Загрузка...</div></div>`;
@@ -1851,10 +1949,14 @@ function renderDashboardPage() {
   const allLists = [...knownListsCache, ...listsFromTasks.map(name => ({ name, color: LIST_COLORS[0], description: "" }))];
 
   const visibleTasks = dashboardShowAll ? tasksCache : tasksCache.filter(t => t.assignee === currentUser.username);
-  const todayTasks = visibleTasks.filter(t => t.today);
+  // Выполненные задачи ("Готово") автоматически уходят из "Сегодня" и из
+  // обычных списков проекта - они видны только в архиве внизу страницы.
+  const activeTasks = visibleTasks.filter(t => t.status !== "Готово");
+  const archivedTasks = visibleTasks.filter(t => t.status === "Готово");
+  const todayTasks = activeTasks.filter(t => t.today);
 
   const listBlocks = allLists.map(list => {
-    const tasksInList = visibleTasks.filter(t => t.list === list.name);
+    const tasksInList = activeTasks.filter(t => t.list === list.name);
     const rows = tasksInList.map(t => renderTaskRow(t, false)).join("");
     return `
     <div class="list-card" style="border-left-color:${list.color}">
@@ -1872,23 +1974,32 @@ function renderDashboardPage() {
     </div>`;
   }).join("");
 
+  const archiveSection = dashboardShowArchive ? `
+  <div class="list-card" style="border-left-color:var(--border-strong);margin-top:16px">
+    <div class="list-card-title" style="margin-bottom:8px">Архив выполненных</div>
+    ${archivedTasks.length ? archivedTasks.map(t => renderTaskRow(t, true)).join("") : `<div class="hint">Архив пуст.</div>`}
+  </div>` : "";
+
   return `
-  <div class="today-banner">
-    <span class="today-label">Сегодня</span>
-    <span class="today-date">${todayRuFormatted()}</span>
-  </div>
-  <div class="list-card" style="border-left-color:var(--accent);margin-bottom:20px">
-    ${todayTasks.length ? todayTasks.map(t => renderTaskRow(t, true)).join("") : `<div class="hint">На сегодня ничего не отмечено — включите тумблер «Сегодня» у любой задачи.</div>`}
+  <div class="today-card">
+    <div class="today-card-header">
+      <span class="today-label">Сегодня</span>
+      <span class="today-date">${todayRuFormatted()}</span>
+    </div>
+    ${todayTasks.length ? todayTasks.map(t => renderTaskRow(t, true)).join("") : `<div class="hint" style="padding-top:10px">На сегодня ничего не отмечено — включите тумблер «Сегодня» у любой задачи.</div>`}
   </div>
 
-  <div class="card card-wide" style="padding:16px 20px">
+  <div class="board-grid">${listBlocks || '<div class="hint">Списков пока нет — добавьте первый.</div>'}</div>
+  <button class="btn btn-secondary" style="margin-top:16px" id="addListBtn">+ Добавить список</button>
+
+  <div class="dashboard-footer-bar">
     <div class="checkbox-row" style="margin-top:0">
       <input type="checkbox" id="dashboardShowAllCheck" ${dashboardShowAll ? "checked" : ""}>
-      <label for="dashboardShowAllCheck">Показать задачи всех пользователей (не только мои)</label>
+      <label for="dashboardShowAllCheck">Показать задачи всех пользователей</label>
     </div>
+    <button class="btn btn-secondary btn-small" id="toggleArchiveBtn">${dashboardShowArchive ? "Скрыть архив" : `Архив (${archivedTasks.length})`}</button>
   </div>
-  ${listBlocks || '<div class="card card-wide"><div class="hint">Списков пока нет — добавьте первый.</div></div>'}
-  <button class="btn btn-secondary" id="addListBtn">+ Добавить список</button>`;
+  ${archiveSection}`;
 }
 
 function attachDashboardHandlers() {
@@ -1949,6 +2060,7 @@ function attachDashboardHandlers() {
   });
 
   document.getElementById("dashboardShowAllCheck").onchange = (e) => { dashboardShowAll = e.target.checked; renderApp(); };
+  document.getElementById("toggleArchiveBtn").onclick = () => { dashboardShowArchive = !dashboardShowArchive; renderApp(); };
 
   document.querySelectorAll("[data-add-task-to-list]").forEach(btn => {
     btn.onclick = () => {
@@ -1958,8 +2070,8 @@ function attachDashboardHandlers() {
         <input type="text" id="modalTaskTitle">
         <label>Описание</label>
         <textarea id="modalTaskDesc" style="min-height:50px"></textarea>
-        <label class="required">Исполнитель (логин)</label>
-        <input type="text" id="modalTaskAssignee" value="${currentUser.username}">
+        <label class="required">Исполнитель</label>
+        <select id="modalTaskAssignee">${assigneeOptionsHtml(currentUser.username)}</select>
         <label>Срок</label>
         <input type="text" id="modalTaskDueDate" placeholder="напр. 20.08.2026">
         <label>Статус</label>
@@ -1969,7 +2081,7 @@ function attachDashboardHandlers() {
         const title = document.getElementById("modalTaskTitle").value.trim();
         if (!title) return false;
         const description = document.getElementById("modalTaskDesc").value.trim();
-        const assignee = document.getElementById("modalTaskAssignee").value.trim() || currentUser.username;
+        const assignee = document.getElementById("modalTaskAssignee").value || currentUser.username;
         const dueDate = document.getElementById("modalTaskDueDate").value.trim();
         const status = document.getElementById("modalTaskStatus").value;
         const today = document.getElementById("modalTaskToday").checked;
