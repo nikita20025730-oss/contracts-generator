@@ -2453,7 +2453,16 @@ function renderDashboardPage() {
   const archivedTasks = tasksCache.filter(t =>
     t.status === "Готово" && (sameUsername(t.assignee, currentUser.username) || ownedLists.some(l => l.name === t.list))
   );
-  const todayTasks = tasksCache.filter(t => t.today && t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) && (dashboardShowHiddenTasks || !t.hidden));
+  // "Сегодня" - задачи, отмеченные тумблером. Как и с архивом: считаем и
+  // назначенные на меня лично, И те, что в МОИХ списках (даже если
+  // исполнитель - кто-то другой) - иначе тумблер, включённый на задаче
+  // коллеги в СВОЁМ ЖЕ списке, визуально показывал бы "включено", но
+  // задача не попадала бы в "Сегодня" (именно так выглядел этот баг).
+  const todayTasks = tasksCache.filter(t =>
+    t.today && t.status !== "Готово" &&
+    (sameUsername(t.assignee, currentUser.username) || ownedLists.some(l => l.name === t.list)) &&
+    (dashboardShowHiddenTasks || !t.hidden)
+  );
 
   const renderListCard = (list, tasksInList, showAddButton) => {
     const rows = tasksInList.map(t => renderTaskRow(t, false)).join("");
