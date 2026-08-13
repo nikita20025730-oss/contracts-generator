@@ -2236,6 +2236,45 @@ async function updateKnownList(name, updates) {
   await saveKnownLists();
 }
 
+// ============================================================
+// ЖИВОЕ ОБНОВЛЕНИЕ (real-time sync) задач и списков между сессиями
+// ============================================================
+// Вместо однократной загрузки (fetch раз при открытии страницы) держим
+// постоянно открытое соединение с Firestore (onSnapshot). Как только
+// кто-то (вы на другом устройстве, или коллега) меняет задачу или
+// список - изменения мгновенно прилетают сюда и экран сам перерисовывается,
+// без необходимости обновлять страницу вручную.
+let tasksUnsubscribe = null;
+let listsUnsubscribe = null;
+
+function startRealtimeSync() {
+  if (tasksUnsubscribe) return; // уже подключено - не плодим второй слушатель
+
+  tasksUnsubscribe = fbDb.collection("tasks").onSnapshot(
+    (snap) => {
+      tasksCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (currentPage === "dashboard") renderApp();
+    },
+    (err) => { console.error("Синхронизация задач прервана:", err.message); }
+  );
+
+  listsUnsubscribe = fbDb.collection("meta").doc("taskLists").onSnapshot(
+    (snap) => {
+      const data = snap.exists ? snap.data() : {};
+      const raw = data.lists || data.names || [];
+      knownListsCache = raw.map(item => typeof item === "string"
+        ? { name: item, color: LIST_COLORS[0], description: "" }
+        : { color: LIST_COLORS[0], description: "", ...item });
+      if (currentPage === "dashboard") renderApp();
+    },
+    (err) => { console.error("Синхронизация списков прервана:", err.message); }
+  );
+}
+function stopRealtimeSync() {
+  if (tasksUnsubscribe) { tasksUnsubscribe(); tasksUnsubscribe = null; }
+  if (listsUnsubscribe) { listsUnsubscribe(); listsUnsubscribe = null; }
+}
+
 async function loadTasks() {
   try {
     const snap = await fbDb.collection("tasks").get();
@@ -2246,6 +2285,7 @@ async function loadTasks() {
   await loadKnownLists();
   if (!usersDirectoryLoaded) await loadUsersDirectory();
   tasksLoaded = true;
+  startRealtimeSync(); // с этого момента данные обновляются сами, без перезагрузки
 }
 
 // Регистронезависимое сравнение логинов - защита на случай уже
@@ -2368,7 +2408,7 @@ function renderTaskRow(t, showListTag) {
 }
 
 let dashboardShowArchive = false;
-let dashboardShowHidden = false;
+let dashboardShowHiddenTasks = false; // скрытие есть только у ЗАДАЧ (у списков убрали - путало)
 
 // Список всех известных списков + владелец каждого - используется и при
 // отрисовке дашборда, и при выгрузке отчёта, чтобы логика "какие списки
@@ -2396,12 +2436,11 @@ function renderDashboardPage() {
   // кнопка показывала "(1)" и переключалась, но ничего не раскрывалось -
   // если тот единственный скрытый список принадлежал не вам.
   const ownedLists = getMyOwnedLists(); // для проверки владения (архив, отчёт, счётчик скрытых) - без учёта "скрыт"
-  const hiddenListsCount = ownedLists.filter(l => l.hidden).length;
   const hiddenTasksCount = tasksCache.filter(t => t.hidden && (sameUsername(t.assignee, currentUser.username) || ownedLists.some(l => l.name === t.list))).length;
 
   // Список карточек ("Мои списки"), которые реально показываются на экране
   // - скрытые убираем, пока не включена кнопка "Показать скрытые".
-  const myLists = ownedLists.filter(l => dashboardShowHidden || !l.hidden);
+  const myLists = ownedLists;
   // Чужие списки - нужны, чтобы найти в них задачи, назначенные на меня
   // (раздел "Назначенные").
   const otherLists = allLists.filter(l => l.createdBy && !sameUsername(l.createdBy, currentUser.username));
@@ -2414,15 +2453,15 @@ function renderDashboardPage() {
   const archivedTasks = tasksCache.filter(t =>
     t.status === "Готово" && (sameUsername(t.assignee, currentUser.username) || ownedLists.some(l => l.name === t.list))
   );
-  const todayTasks = tasksCache.filter(t => t.today && t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) && (dashboardShowHidden || !t.hidden));
+  const todayTasks = tasksCache.filter(t => t.today && t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) && (dashboardShowHiddenTasks || !t.hidden));
 
   const renderListCard = (list, tasksInList, showAddButton) => {
     const rows = tasksInList.map(t => renderTaskRow(t, false)).join("");
     return `
-    <div class="list-card" style="border-left-color:${list.color}${list.hidden ? ';opacity:0.6' : ''}">
+    <div class="list-card" style="border-left-color:${list.color}">
       <div class="list-card-header">
         <div>
-          <div class="list-card-title"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}${list.hidden ? ' <span class="hint">(скрыт)</span>' : ''}</div>
+          <div class="list-card-title"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}</div>
           ${list.description ? `<div class="list-card-desc">${list.description}</div>` : ""}
         </div>
         ${showAddButton !== false ? `<button class="icon-btn" data-edit-list="${list.name}" title="Изменить список"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>` : ""}
@@ -2438,14 +2477,14 @@ function renderDashboardPage() {
   // (кто угодно может быть исполнителем) - это же ваш собственный список,
   // нужен полный обзор, а не только свои задачи в нём.
   const myListBlocks = myLists.map(list => {
-    const tasksInList = tasksCache.filter(t => t.list === list.name && t.status !== "Готово" && (dashboardShowHidden || !t.hidden));
+    const tasksInList = tasksCache.filter(t => t.list === list.name && t.status !== "Готово" && (dashboardShowHiddenTasks || !t.hidden));
     return renderListCard(list, tasksInList, true);
   }).join("");
 
   // "Назначенные" - задачи из ЧУЖИХ списков, назначенные на меня.
   const assignedTasks = tasksCache.filter(t =>
     t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) &&
-    otherLists.some(l => l.name === t.list) && (dashboardShowHidden || !t.hidden)
+    otherLists.some(l => l.name === t.list) && (dashboardShowHiddenTasks || !t.hidden)
   );
   const assignedBlock = assignedTasks.length || otherLists.length ? renderListCard(
     { name: "Назначенные", color: "#6b7280", description: "Задачи из чужих списков, назначенные на вас" },
@@ -2484,7 +2523,7 @@ function renderDashboardPage() {
   ${assignedBlock ? `<h3 style="margin-top:24px">Назначенные</h3><div class="board-grid">${assignedBlock}</div>` : ""}
 
   <div class="dashboard-footer-bar">
-    ${hiddenListsCount + hiddenTasksCount > 0 ? `<button class="btn btn-secondary btn-small" id="toggleHiddenBtn">${dashboardShowHidden ? "Скрыть скрытые" : `Показать скрытые (${hiddenListsCount + hiddenTasksCount})`}</button>` : "<div></div>"}
+    ${hiddenTasksCount > 0 ? `<button class="btn btn-secondary btn-small" id="toggleHiddenBtn">${dashboardShowHiddenTasks ? "Скрыть скрытые" : `Показать скрытые (${hiddenTasksCount})`}</button>` : "<div></div>"}
     <button class="btn btn-secondary btn-small" id="toggleArchiveBtn">${dashboardShowArchive ? "Скрыть архив" : `Архив (${archivedTasks.length})`}</button>
   </div>
   ${archiveSection}`;
@@ -2620,15 +2659,13 @@ function attachDashboardHandlers() {
         <div class="hint">У старых списков владелец не был указан — выберите здесь, чтобы список верно попадал в «Мои списки»/«Назначенные».</div>
         <label>Цвет</label>
         ${colorPickerHtml(selectedColor)}
-        <div class="checkbox-row"><input type="checkbox" id="modalListHidden" ${list.hidden?'checked':''}><label for="modalListHidden">Скрыть список с дашборда</label></div>
         <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border)">
           <button type="button" class="btn-danger-text" id="modalDeleteListBtn">Удалить список</button>
         </div>
       `, async () => {
         const description = document.getElementById("modalListDesc").value.trim();
         const createdBy = document.getElementById("modalListOwner").value;
-        const hidden = document.getElementById("modalListHidden").checked;
-        await updateKnownList(list.name, { color: selectedColor, description, createdBy, hidden });
+        await updateKnownList(list.name, { color: selectedColor, description, createdBy });
         renderApp();
         return true;
       });
@@ -2646,7 +2683,7 @@ function attachDashboardHandlers() {
   // (обработчик для dashboardShowAllCheck убран вместе с самим чекбоксом)
   document.getElementById("toggleArchiveBtn").onclick = () => { dashboardShowArchive = !dashboardShowArchive; renderApp(); };
   const toggleHiddenBtn = document.getElementById("toggleHiddenBtn");
-  if (toggleHiddenBtn) toggleHiddenBtn.onclick = () => { dashboardShowHidden = !dashboardShowHidden; renderApp(); };
+  if (toggleHiddenBtn) toggleHiddenBtn.onclick = () => { dashboardShowHiddenTasks = !dashboardShowHiddenTasks; renderApp(); };
   const exportReportBtn = document.getElementById("exportReportBtn");
   if (exportReportBtn) exportReportBtn.onclick = handleExportTasksReport;
 
@@ -3173,8 +3210,10 @@ async function handleLogin() {
 }
 
 function handleLogout() {
+  stopRealtimeSync();
   if (fbAuth) fbAuth.signOut();
   currentUser = null;
+  tasksLoaded = false; // при следующем входе загрузка и синхронизация начнутся заново
   renderLoginScreen();
 }
 
