@@ -309,7 +309,7 @@ const CONTRACTOR_FIELD_SETS = {
   samozanyaty: [{name:"contractor_full_name",label:"ФИО (обычным регистром)"},{name:"contractor_passport_number",label:"Паспорт (серия номер)"},{name:"contractor_passport_issued_by",label:"Кем выдан"},{name:"contractor_passport_issued_date",label:"Дата выдачи"},{name:"contractor_address",label:"Адрес регистрации"},{name:"contractor_inn",label:"ИНН"},{name:"contractor_bank_account",label:"Расчётный счёт"},{name:"contractor_bank_name",label:"Наименование банка"},{name:"contractor_corr_account",label:"Корр. счёт"},{name:"contractor_bik",label:"БИК"},{name:"contractor_signatory_initials",label:"Подпись"}],
 };
 
-const CONTRACTORS_REGISTRY = [
+let CONTRACTORS_REGISTRY = [
   {id:"shmelev",type:"ip",short_name:"ИП Шмелев П.В.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ШМЕЛЕВ ПАВЕЛ ВЛАДИМИРОВИЧ",contractor_ogrnip:"318784700021981",contractor_ogrn_date:"26.01.2018",contractor_address:"196105, САНКТ-ПЕТЕРБУРГ, УЛ. БЛАГОДАТНАЯ Д. 16, КВ. 1",contractor_inn:"781015941806",contractor_bank_account:"40802810970010083493",contractor_bank_name:"МОСКОВСКИЙ ФИЛИАЛ АО КБ «МОДУЛЬБАНК»",contractor_corr_account:"30101810645250000092",contractor_bik:"044525092",contractor_signatory_initials:"П.В. Шмелев",document_signature_name:"ИП Шмелев Павел Владимирович"},
   {id:"lenshina",type:"samozanyaty",short_name:"Самозанятая Леньшина А.П.",contractor_full_name:"Леньшина Арина Павловна",contractor_passport_number:"4021 896174",contractor_passport_issued_by:"ГУ МВД России по г. Санкт-Петербургу и Ленинградской области",contractor_passport_issued_date:"07.07.2021",contractor_address:"ВЛАДИМИРСКАЯ ОБЛ, Г. ВЛАДИМИР, УЛ. ДОБРОСЕЛЬСКАЯ, Д. 173, КВ. 13",contractor_inn:"332903616352",contractor_bank_account:"40817810600115159881",contractor_bank_name:"АО «ТБанк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.П. Леньшина",document_signature_name:"Леньшина Арина Павловна"},
   {id:"minenkova",type:"ip",short_name:"ИП Миненкова В.Ю.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МИНЕНКОВА ВИКТОРИЯ ЮРЬЕВНА",contractor_ogrnip:"325784700253862",contractor_ogrn_date:"06.08.2025",contractor_address:"196084, Г. САНКТ-ПЕТЕРБУРГ, ПАРФЕНОВСКАЯ УЛ. Д. 14, К.1, СТР.1, КВ.958",contractor_inn:"781661467406",contractor_bank_account:"40802810320000824409",contractor_bank_name:"ООО «Банк Точка»",contractor_corr_account:"30101810745374525104",contractor_bik:"044525104",contractor_signatory_initials:"В.Ю. Миненкова",document_signature_name:"ИП Миненкова Виктория Юрьевна"},
@@ -318,8 +318,42 @@ const CONTRACTORS_REGISTRY = [
   {id:"murin",type:"ip",short_name:"ИП Мурин И.В. (аренда)",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ МУРИН ИГОРЬ ВАСИЛЬЕВИЧ",contractor_ogrnip:"317784700103542",contractor_ogrn_date:"07.04.2017",contractor_address:"191024, Г. САНКТ-ПЕТЕРБУРГ, УЛ. ХЕРСОНСКАЯ, Д. 10, КВ.51",contractor_inn:"782512361910",contractor_bank_account:"40802810800000121920",contractor_bank_name:"АО «Тинькофф Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"И.В. Мурин",document_signature_name:"ИП Мурин Игорь Васильевич"},
   {id:"faul",type:"ip",short_name:"ИП Фауль А.М.",contractor_full_name:"ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ФАУЛЬ АРИНА МАКСИМОВНА",contractor_ogrnip:"325784700132267",contractor_ogrn_date:"22.04.2025",contractor_address:"195112, РОССИЯ, Г САНКТ-ПЕТЕРБУРГ, ПР-КТ ЗАНЕВСКИЙ, Д 20, А, КВ 6",contractor_inn:"220917649066",contractor_bank_account:"40802810700008206484",contractor_bank_name:"АО «Т Банк»",contractor_corr_account:"30101810145250000974",contractor_bik:"044525974",contractor_signatory_initials:"А.М. Фауль",document_signature_name:"ИП Фауль Арина Максимовна"},
 ];
+const CONTRACTORS_REGISTRY_DEFAULTS = CONTRACTORS_REGISTRY.map(c => ({ ...c }));
+let contractorsLoadedFromFirestore = false;
+async function loadContractorsFromFirestore() {
+  try {
+    const snap = await fbDb.collection("meta").doc("contractors").get();
+    if (snap.exists && Array.isArray(snap.data().list) && snap.data().list.length) {
+      CONTRACTORS_REGISTRY = snap.data().list;
+    } else {
+      await fbDb.collection("meta").doc("contractors").set({ list: CONTRACTORS_REGISTRY_DEFAULTS });
+    }
+  } catch (e) {}
+  contractorsLoadedFromFirestore = true;
+}
+async function addContractorToRegistry(contractor) {
+  CONTRACTORS_REGISTRY.push(contractor);
+  try { await fbDb.collection("meta").doc("contractors").set({ list: CONTRACTORS_REGISTRY }); } catch (e) {}
+}
 
 const BODY_FIELD_LABELS = { subject_description:"Описание услуги/предмета договора (для п.1.1)", subject_description_short:"Краткое описание услуги (для списка приложений)", project_name:"Название проекта (по гранту)", total_period_start:"Начало общего периода (число)", total_period_end:"Конец общего периода (с месяцем и годом)", service_deadline:"Срок оказания услуг (дата, 'до ...')", delivery_deadline:"Срок поставки (дата)", rental_object_type:"Тип объекта аренды (напр. 'Оборудование')", project_solution_name:"Проект", rental_start_date:"Начало срока аренды", rental_end_date:"Конец срока аренды" };
+
+// Поле "Название проекта" - выпадающий список из проектов сметы выбранного
+// гранта (та же самая коллекция subsidies[x].projects, что и в "Учёт по
+// смете"), а не свободный текст - меньше риск опечатки/расхождения с реальным
+// названием в таблице. Остальные поля тела договора остаются текстовыми.
+function renderBodyFieldInput(fieldName) {
+  if (fieldName === "project_name") {
+    const subsidy = findSubsidy(state.grantId);
+    const projects = subsidy ? subsidy.projects : [];
+    if (projects.length) {
+      const current = state.bodyValues.project_name || "";
+      const options = projects.map(p => `<option value="${p.name}" ${p.name===current?'selected':''}>${p.name}</option>`).join("");
+      return `<select data-body-field="project_name">${options}</select>`;
+    }
+  }
+  return `<input type="text" required data-body-field="${fieldName}" value="${state.bodyValues[fieldName]||''}">`;
+}
 const APPENDIX_FIELD_LABELS = { project_solution_name:"Проект", period:"Период оказания услуг", place:"Место оказания услуг", goods_description_short:"Краткое описание товаров" };
 
 function buildActingBasis(contractorVariant, contractor) {
@@ -340,7 +374,7 @@ function buildPayload(state, config, grant) {
     customer_bank_authority: customer.bank_authority, customer_eks: customer.eks, customer_ks: customer.ks, customer_bik: customer.bik,
     customer_personal_account: customer.personal_account, customer_signatory_position_short: customer.signatory_position_short,
     customer_signatory_initials: customer.signatory_initials, customer_signatory_initials_reversed: customer.signatory_initials_reversed,
-    vat_clause: state.vatClause || "НДС не облагается", payment_term_days: state.paymentTermDays || "7", payment_term_days_words: state.paymentTermDaysWords || "Семи",
+    payment_term_days: state.paymentTermDays || "7", payment_term_days_words: state.paymentTermDaysWords || "Семи",
   };
   Object.assign(data, state.contractor);
   const actingBasis = buildActingBasis(state.contractorVariant, state.contractor);
@@ -348,6 +382,16 @@ function buildPayload(state, config, grant) {
   for (const field of config.bodyFields) data[field] = state.bodyValues[field];
   // Сумма договора - всегда авто-считается из строк приложений/аренды (см. computeContractTotalRub), не вводится вручную
   data.total_amount_rub = computeContractTotalRub(state, config);
+  // Текст пункта НДС - строится из выбранного режима и, если НДС включён в
+  // сумму, автоматически считается сама сумма налога (сумма уже с НДС,
+  // выделяем налог расчётным путём, а не прибавляем сверху).
+  if (state.vatMode === "included") {
+    const rate = parseFloat(state.vatRate) || 20;
+    const vatAmount = data.total_amount_rub - data.total_amount_rub / (1 + rate / 100);
+    data.vat_clause = `в том числе НДС ${rate}% — ${formatRuNumber(vatAmount)} руб.`;
+  } else {
+    data.vat_clause = "НДС не облагается";
+  }
   const appendicesForLoop = [];
   state.appendices.forEach((appendix, idx) => {
     const n = idx + 1;
@@ -363,6 +407,24 @@ function buildPayload(state, config, grant) {
     data[config.loopNames[idx]] = appendix.rows;
   });
   data.appendices = appendicesForLoop;
+
+  // Если шаблон физически поддерживает больше приложений, чем пользователь
+  // сейчас заполнил (напр. выбрано 1 из 2 возможных) - явно заполняем
+  // оставшиеся слоты пустыми значениями. Иначе, без этого, в документе на
+  // месте недостающих переменных появятся заметные метки "[[НЕ ЗАПОЛНЕНО]]"
+  // на второй (пустой) физической странице приложения.
+  for (let n = state.appendices.length + 1; n <= config.appendixCount; n++) {
+    for (const field of config.appendixFields) {
+      const finalKey = config.appendixCount > 1 ? `appendix${n}_${field}` : `appendix_${field}`;
+      if (data[finalKey] === undefined) data[finalKey] = "";
+    }
+    if (config.appendixTotalPattern === "appendixN_total" && data[`appendix${n}_total_rub`] === undefined) {
+      data[`appendix${n}_total_rub`] = 0;
+    }
+    if (config.loopNames[n - 1] && data[config.loopNames[n - 1]] === undefined) {
+      data[config.loopNames[n - 1]] = [];
+    }
+  }
   if (state.rental) {
     const dailyTotal = computeRentalDailyTotalRub(state, config);
     const days = parseInt(state.rental.days) || 1;
@@ -444,7 +506,43 @@ function recalcRentalLive() {
 
 const STEP_TITLES = ["Тип и грант", "Стороны", "Тело договора", "Приложения", "Проверка"];
 let currentStep = 0;
-const state = { contractType: null, contractorVariant: null, grantId: "vkmp", contractNumber: "", contractDate: "", polozhenieClause: "пп. 4 п.1 раздела 2 главы IV", notEmployeeConfirmed: false, contractor: {}, selectedContractorId: null, bodyValues: {}, totalAmountRub: null, appendices: [], rental: null, vatClause: "НДС не облагается", paymentTermDays: "7", paymentTermDaysWords: "Семи" };
+const state = { contractType: null, contractorVariant: null, grantId: "vkmp", contractNumber: "", contractDate: "", polozhenieClause: "пп. 4 п.1 раздела 2 главы IV", notEmployeeConfirmed: false, contractor: {}, selectedContractorId: null, bodyValues: {}, totalAmountRub: null, appendices: [], rental: null, vatMode: "none", vatRate: 20, paymentTermDays: "7", paymentTermDaysWords: "Семи" };
+
+// ============================================================
+// АВТОСОХРАНЕНИЕ ЧЕРНОВИКА ДОГОВОРА
+// ============================================================
+const DRAFT_KEY = "contractDraftV1";
+function saveDraftToLocalStorage() {
+  try { window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ state, currentStep })); } catch (e) {}
+}
+function restoreDraftFromLocalStorage() {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    Object.assign(state, saved.state);
+    if (typeof saved.currentStep === "number") currentStep = saved.currentStep;
+    return true;
+  } catch (e) { return false; }
+}
+function clearDraft() {
+  window.localStorage.removeItem(DRAFT_KEY);
+}
+function resetDraft() {
+  clearDraft();
+  Object.assign(state, {
+    contractType: null, contractorVariant: null, grantId: "vkmp", contractNumber: "", contractDate: "",
+    polozhenieClause: "пп. 4 п.1 раздела 2 главы IV", notEmployeeConfirmed: false, contractor: {}, selectedContractorId: null,
+    bodyValues: {}, totalAmountRub: null, appendices: [], rental: null, vatMode: "none", vatRate: 20,
+    paymentTermDays: "7", paymentTermDaysWords: "Семи",
+  });
+  currentStep = 0;
+}
+// Автосохранение раз в несколько секунд, пока открыт генератор - на случай
+// приложений с большим числом строк, чтобы не потерять набранное при
+// случайном закрытии вкладки или переходе на другую страницу.
+setInterval(() => { if (currentPage === "generator" && state.contractType) saveDraftToLocalStorage(); }, 4000);
+restoreDraftFromLocalStorage();
 
 function configKey() { return `${state.contractType}|${state.contractorVariant}`; }
 function currentConfig() { return CONTRACT_CONFIGS[configKey()]; }
@@ -541,9 +639,112 @@ function validateCurrentStep() {
   return true;
 }
 function emptyRow(config) { const row = {}; config.rowFields.forEach(f => { row[f.name] = f.default || ""; }); return row; }
+// ============================================================
+// ПОДБОР ПОЗИЦИИ ИЗ СМЕТЫ (Шаг 4 — Приложения)
+// ============================================================
+let generatorSmetaCache = null; // строки сметы для текущей комбинации грант+проект
+let generatorSmetaCacheKey = null;
+
+function smetaItemsAvailable() {
+  const subsidy = findSubsidy(state.grantId);
+  return !!(subsidy && subsidy.spreadsheetUrl && state.bodyValues.project_name);
+}
+
+async function loadGeneratorSmetaItems() {
+  const subsidy = findSubsidy(state.grantId);
+  const projectName = state.bodyValues.project_name;
+  const project = subsidy ? subsidy.projects.find(p => p.name === projectName) : null;
+  if (!subsidy || !subsidy.spreadsheetUrl || !project) return [];
+
+  const cacheKey = `${state.grantId}:${project.sheetName}`;
+  if (generatorSmetaCacheKey === cacheKey && generatorSmetaCache) return generatorSmetaCache;
+
+  try {
+    const res = await fetch(`${window.location.origin}/.netlify/functions/read-budget-sheet`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spreadsheetId: extractSpreadsheetId(subsidy.spreadsheetUrl), sheetName: project.sheetName }),
+    });
+    const json = await res.json();
+    generatorSmetaCache = json.success ? json.items : [];
+    generatorSmetaCacheKey = cacheKey;
+  } catch (e) {
+    generatorSmetaCache = [];
+    generatorSmetaCacheKey = cacheKey;
+  }
+  return generatorSmetaCache;
+}
+
+// Строки сметы называют колонки по-разному в разных грантах ("Наименование
+// расходов" / "Статья расходов" / "Перечень расходов" и т.п.) - ищем по
+// нескольким возможным вариантам названия, а не по одному жёстко заданному.
+function smetaFieldLookup(item, candidates) {
+  for (const key of Object.keys(item)) {
+    if (key.startsWith("_")) continue;
+    if (candidates.some(c => key.toLowerCase().includes(c))) {
+      const v = item[key];
+      if (v && String(v).trim() !== "") return String(v).trim();
+    }
+  }
+  return "";
+}
+
+function fillRowFromSmetaItem(row, config, smetaItem) {
+  const name = smetaFieldLookup(smetaItem, ["наименование", "статья расход"]);
+  const description = smetaFieldLookup(smetaItem, ["перечень", "колонка_c"]) || name;
+  const quantity = smetaFieldLookup(smetaItem, ["кол-во", "количество"]);
+  const price = smetaFieldLookup(smetaItem, ["цена", "стоимость единиц"]);
+
+  const newRow = { ...row };
+  // Заполняем то, что реально есть в наборе полей этого типа договора -
+  // разные типы называют поля по-разному (specialist_type/item_name и т.п.).
+  for (const f of config.rowFields) {
+    if (/type|name/.test(f.name) && !/quantity|price|total/.test(f.name)) newRow[f.name] = name;
+    else if (/description/.test(f.name)) newRow[f.name] = description;
+  }
+  newRow[config.calcFields.qty] = quantity || newRow[config.calcFields.qty];
+  newRow[config.calcFields.price] = price || newRow[config.calcFields.price];
+  newRow[config.calcFields.total] = formatRuNumber(parseRuNumber(newRow[config.calcFields.qty]) * parseRuNumber(newRow[config.calcFields.price]));
+  return newRow;
+}
+
+async function openSmetaPickerModal(aIdx) {
+  const items = await loadGeneratorSmetaItems();
+  if (!items.length) {
+    showModal("Позиции сметы", `<div class="hint">Не удалось найти позиции сметы для проекта «${state.bodyValues.project_name}». Проверьте, что смета загружается корректно в разделе «Учёт по смете».</div>`, async () => true);
+    return;
+  }
+  const rowsHtml = items.map((it, i) => {
+    const name = smetaFieldLookup(it, ["наименование", "статья расход"]) || "—";
+    const amount = smetaFieldLookup(it, ["запрашиваемая сумма", "сумма статьи", "стоимость"]) || "";
+    return `<div class="task-row" style="cursor:pointer" data-smeta-pick-item="${i}">
+      <div class="task-main"><div class="task-title">${name}</div>${amount ? `<div class="task-desc">${amount} руб.</div>` : ""}</div>
+    </div>`;
+  }).join("");
+  showModal("Выбрать позицию из сметы", `<div style="max-height:50vh;overflow-y:auto">${rowsHtml}</div>`, async () => false);
+  document.querySelectorAll("[data-smeta-pick-item]").forEach(el => {
+    el.onclick = () => {
+      const idx = parseInt(el.dataset.smetaPickItem);
+      const config = currentConfig();
+      const filledRow = fillRowFromSmetaItem(emptyRow(config), config, items[idx]);
+      // Если единственная строка приложения ещё пустая - заполняем её,
+      // иначе добавляем новую строку.
+      const appendix = state.appendices[aIdx];
+      const lastRow = appendix.rows[appendix.rows.length - 1];
+      const isLastRowEmpty = Object.values(lastRow).every(v => !v);
+      if (isLastRowEmpty) appendix.rows[appendix.rows.length - 1] = filledRow;
+      else appendix.rows.push(filledRow);
+      closeModal();
+      renderApp();
+    };
+  });
+}
+
 function ensureAppendices() {
   const config = currentConfig(); if (!config) return;
-  while (state.appendices.length < config.appendixCount) state.appendices.push({ values: {}, totalRub: 0, rows: [emptyRow(config)] });
+  // По умолчанию - одно приложение, даже если шаблон физически поддерживает
+  // больше (до config.appendixCount) - остальные добавляются кнопкой
+  // "+ Добавить приложение" на Шаге 4.
+  if (state.appendices.length === 0) state.appendices.push({ values: {}, totalRub: 0, rows: [emptyRow(config)] });
   state.appendices = state.appendices.slice(0, config.appendixCount);
 }
 
@@ -891,20 +1092,41 @@ async function handleDiscoverProjects(subsidyId) {
 // ============================================================
 // СТРАНИЦА «УЧЁТ ПО СМЕТЕ»
 // ============================================================
-function loadSubsidies() {
-  try {
-    const raw = window.localStorage.getItem("subsidies");
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  // Стартовый набор совпадает с грантами генератора договоров.
+// Начинаем с локального набора по умолчанию (синхронно, чтобы ничего не
+// сломалось до входа) - настоящие данные подтягиваются из Firestore сразу
+// после входа, в showApp(). Это чинит реальный баг: раньше субсидии и
+// ссылки на таблицы хранились только в localStorage конкретного браузера
+// и "терялись" на других устройствах/сессиях.
+function defaultSubsidiesSeed() {
   return [
     { id: "vkmp", name: "ВКМП (Росмолодёжь)", spreadsheetUrl: "", projects: [] },
     { id: "rddm_spbguptd", name: "РДДМ (СПбГУПТД)", spreadsheetUrl: "", projects: [{ id: "tochka", name: "ТОЧКА", sheetName: "ТОЧКА" }] },
     { id: "rddm_npt", name: "РДДМ (НПТ)", spreadsheetUrl: "", projects: [{ id: "nit_kultury", name: "НИТЬ КУЛЬТУРЫ", sheetName: "НИТЬ КУЛЬТУРЫ" }] },
   ];
 }
-function saveSubsidies(list) { window.localStorage.setItem("subsidies", JSON.stringify(list)); subsidies = list; }
-let subsidies = loadSubsidies();
+let subsidies = defaultSubsidiesSeed();
+let subsidiesLoadedFromFirestore = false;
+
+async function loadSubsidiesFromFirestore() {
+  try {
+    const snap = await fbDb.collection("meta").doc("subsidies").get();
+    if (snap.exists && Array.isArray(snap.data().list) && snap.data().list.length) {
+      subsidies = snap.data().list;
+    } else {
+      // Первый запуск - в Firestore ещё ничего нет, сохраняем набор по
+      // умолчанию, чтобы он стал общим для всех с этого момента.
+      await fbDb.collection("meta").doc("subsidies").set({ list: subsidies });
+    }
+  } catch (e) {
+    // Не удалось достучаться до Firestore - остаёмся на локальном наборе
+    // по умолчанию, чтобы страница хотя бы не была пустой.
+  }
+  subsidiesLoadedFromFirestore = true;
+}
+async function saveSubsidies(list) {
+  subsidies = list;
+  try { await fbDb.collection("meta").doc("subsidies").set({ list }); } catch (e) {}
+}
 
 function smetaCacheKey(subsidyId, projectId) { return `smetaCache_${subsidyId}_${projectId}`; }
 function loadSmetaCache(subsidyId, projectId) {
@@ -991,12 +1213,15 @@ function isStatusColumn(colName) {
 // Таблицах для колонки "Статус договора". При необходимости можно
 // расширить список — для неизвестных статусов используется серый.
 const STATUS_COLORS = [
-  { match: /подписан/i, bg: "#d1fae5", color: "#047857" },
+  { match: /^оплачен$|^оплачено$/i, bg: "#d1fae5", color: "#047857" },
+  { match: /не\s*оплачен/i, bg: "#fee2e2", color: "#b91c1c" },
+  { match: /^подписан$/i, bg: "#d1fae5", color: "#047857" },
   { match: /не\s*подписан|ожида/i, bg: "#fef3c7", color: "#92400e" },
   { match: /расторгн|отменен|отменён/i, bg: "#fee2e2", color: "#b91c1c" },
   { match: /подготовлен|в работе|на согласовании/i, bg: "#dbeafe", color: "#1e40af" },
   { match: /не начат/i, bg: "#f3f4f6", color: "#6b7280" },
 ];
+const STATUS_OPTIONS = ["Оплачен", "Не оплачен", "Подписан", "Не подписан", "В работе", "На согласовании", "Не начат", "Расторгнут"];
 function getStatusColor(value) {
   const found = STATUS_COLORS.find((s) => s.match.test(value));
   return found || { bg: "#f3f4f6", color: "#374151" };
@@ -1030,55 +1255,34 @@ function renderBudgetTable() {
   // (кроме служебных полей, начинающихся с "_" — они не из таблицы).
   const columns = Object.keys(smetaState.loadedItems[0]).filter(k => !k.startsWith("_"));
   const spans = computeColumnSpans(smetaState.loadedItems, columns);
-  // Реальные колонки учёта - определяются по тем заголовкам, что
-  // действительно есть в загруженной таблице, а не по угаданным заранее
-  // названиям. Это гарантирует, что запись обратно попадёт точно в нужную
-  // колонку, какой бы текст заголовка ни был в конкретной смете.
-  const trackingColumns = columns.filter(isTrackingColumn);
 
   const rows = smetaState.loadedItems.map((item, idx) => {
-    const isEditing = smetaState.editingRow === idx;
-    const trackingFieldsHtml = trackingColumns.length ? trackingColumns.map((c, fi) => `
-      <div style="margin-top:${fi===0?'0':'12px'}">
-        <label>${c}</label>
-        <input type="text" data-track-field="${idx}:${c}" value="${(item[c] && String(item[c]).trim() !== '' ? item[c] : '').toString().replace(/"/g,'&quot;')}">
-      </div>
-    `).join("") : `<div class="hint">В этой таблице не нашлось колонок учёта (Договор/Счёт/УПД/акт/Платёжное) — писать пока некуда.</div>`;
-    const trackingForm = isEditing ? `
-      <tr><td colspan="${columns.length + 1}" style="background:#fafafa">
-        ${trackingFieldsHtml}
-        <div style="margin-top:12px">
-          <button class="btn btn-primary btn-small" data-save-tracking="${idx}">Сохранить в Таблицу</button>
-          <button class="btn btn-secondary btn-small" data-cancel-tracking="${idx}">Отмена</button>
-        </div>
-        <div id="trackStatus_${idx}" style="margin-top:8px;font-size:12px"></div>
-      </td></tr>` : "";
-
     const cells = columns.map(c => {
       const span = spans[idx][c];
       if (span.skip) return ""; // ячейка "поглощена" объединением выше
       const rowspanAttr = span.rowspan > 1 ? ` rowspan="${span.rowspan}"` : "";
       const raw = item[c];
       const isEmpty = raw === undefined || raw === null || String(raw).trim() === "";
-      const value = isEmpty ? "—" : raw;
+      const value = isEmpty ? "" : String(raw);
+      const escaped = value.replace(/"/g, "&quot;");
 
-      if (isCommentColumn(c) && !isEmpty) {
-        return `<td${rowspanAttr}><details><summary style="cursor:pointer;color:#dc2626;font-weight:600">Подробнее</summary><div style="margin-top:6px">${value}</div></details></td>`;
+      if (isStatusColumn(c)) {
+        const sc = getStatusColor(value);
+        const opts = STATUS_OPTIONS.includes(value) || !value ? STATUS_OPTIONS : [value, ...STATUS_OPTIONS];
+        const optionsHtml = ["", ...opts].map(o => `<option value="${o}" ${o===value?'selected':''}>${o||"—"}</option>`).join("");
+        return `<td${rowspanAttr}><select data-cell-edit="${idx}:${c}" style="background:${sc.bg};color:${sc.color};font-weight:600;border:none;padding:4px 8px;border-radius:10px">${optionsHtml}</select></td>`;
       }
-      if (isStatusColumn(c) && !isEmpty) {
-        const sc = getStatusColor(String(value));
-        return `<td${rowspanAttr}><span style="display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${sc.bg};color:${sc.color}">${value}</span></td>`;
+      if (isCommentColumn(c)) {
+        return `<td${rowspanAttr} style="min-width:160px"><textarea data-cell-edit="${idx}:${c}" style="min-height:32px;font-size:12px;border:1px solid transparent;background:transparent;resize:vertical" onfocus="this.style.border='1px solid var(--border-strong)';this.style.background='var(--input-bg)'">${escaped}</textarea></td>`;
       }
-      if (isTrackingColumn(c) && !isEmpty) {
-        return `<td${rowspanAttr} style="background:#ecfdf5;color:#047857;font-weight:600">${value}</td>`;
-      }
-      return `<td${rowspanAttr}>${value}</td>`;
+      const trackingStyle = isTrackingColumn(c) && !isEmpty ? "background:#ecfdf5;color:#047857;font-weight:600" : "";
+      return `<td${rowspanAttr}><input type="text" data-cell-edit="${idx}:${c}" value="${escaped}" style="border:1px solid transparent;background:transparent;${trackingStyle}" onfocus="this.style.border='1px solid var(--border-strong)';this.style.background='var(--input-bg)'"></td>`;
     }).join("");
 
-    return `<tr>${cells}<td><button class="btn btn-primary btn-small" data-edit-tracking="${idx}">Обновить учёт</button></td></tr>${trackingForm}`;
+    return `<tr>${cells}<td style="width:1%"><span id="cellSaveStatus_${idx}" style="font-size:11px"></span></td></tr>`;
   }).join("");
 
-  return `<div style="overflow-x:auto"><table class="budget-table"><thead><tr>${columns.map(c=>`<th>${c}</th>`).join("")}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="hint" style="margin-bottom:6px">Таблица редактируется прямо здесь — изменения сохраняются в Google Таблицу автоматически при выходе из поля.</div><div style="overflow-x:auto"><table class="budget-table"><thead><tr>${columns.map(c=>`<th>${c}</th>`).join("")}<th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 let smetaAutoRefreshedOnce = false;
@@ -1117,14 +1321,9 @@ function attachSmetaHandlers() {
     };
   });
 
-  document.querySelectorAll("[data-edit-tracking]").forEach(btn => {
-    btn.onclick = () => { smetaState.editingRow = parseInt(btn.dataset.editTracking); renderApp(); };
-  });
-  document.querySelectorAll("[data-cancel-tracking]").forEach(btn => {
-    btn.onclick = () => { smetaState.editingRow = null; renderApp(); };
-  });
-  document.querySelectorAll("[data-save-tracking]").forEach(btn => {
-    btn.onclick = () => handleSaveTracking(parseInt(btn.dataset.saveTracking));
+  document.querySelectorAll("[data-cell-edit]").forEach(el => {
+    const eventName = el.tagName === "TEXTAREA" ? "blur" : "change";
+    el.addEventListener(eventName, () => handleCellEdit(el));
   });
 }
 
@@ -1158,38 +1357,35 @@ async function handleLoadBudget(silent) {
   renderApp();
 }
 
-async function handleSaveTracking(idx) {
+// Сохраняет ОДНУ отредактированную ячейку в Google Таблицу - вызывается
+// при потере фокуса (change для input/select, blur для textarea), не на
+// каждое нажатие клавиши, чтобы не заваливать API запросами.
+async function handleCellEdit(el) {
+  const [idxStr, header] = el.dataset.cellEdit.split(/:(.+)/); // разделяем только по ПЕРВОМУ ":" - заголовок колонки может сам содержать двоеточие
+  const idx = parseInt(idxStr);
   const subsidy = findSubsidy(smetaState.selectedSubsidyId);
   const project = findProject(subsidy, smetaState.selectedProjectId);
-  const siteUrl = window.location.origin;
   const item = smetaState.loadedItems[idx];
-  const statusEl = document.getElementById(`trackStatus_${idx}`);
+  const statusEl = document.getElementById(`cellSaveStatus_${idx}`);
+  const newValue = el.value;
 
-  const updates = {};
-  document.querySelectorAll(`[data-track-field^="${idx}:"]`).forEach(inp => {
-    const header = inp.dataset.trackField.slice(String(idx).length + 1); // отрезаем "idx:" спереди
-    if (inp.value && inp.value.trim() !== "") updates[header] = inp.value;
-  });
+  item[header] = newValue; // локальный кэш сразу обновляем, не дожидаясь ответа сервера
+  saveSmetaCache(smetaState.selectedSubsidyId, smetaState.selectedProjectId, smetaState.loadedItems);
 
-  if (Object.keys(updates).length === 0) { statusEl.textContent = "Нечего сохранять — заполните хотя бы одно поле."; return; }
-
-  statusEl.textContent = "Сохраняю...";
+  if (statusEl) statusEl.textContent = "…";
   try {
-    const res = await fetch(`${siteUrl}/.netlify/functions/write-budget-tracking`, {
+    const res = await fetch(`${window.location.origin}/.netlify/functions/write-budget-tracking`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spreadsheetId: extractSpreadsheetId(subsidy.spreadsheetUrl), sheetName: project.sheetName, rowNumber: item._row, updates }),
+      body: JSON.stringify({ spreadsheetId: extractSpreadsheetId(subsidy.spreadsheetUrl), sheetName: project.sheetName, rowNumber: item._row, updates: { [header]: newValue } }),
     });
     const json = await res.json();
-    if (res.ok && json.success) {
-      const notFound = json.results.filter(r => !r.written);
-      statusEl.textContent = notFound.length
-        ? "⚠️ Часть колонок не найдена в таблице: " + notFound.map(r => r.header).join(", ")
-        : "✅ Сохранено";
+    if (res.ok && json.success && json.results[0] && json.results[0].written) {
+      if (statusEl) { statusEl.textContent = "✓"; statusEl.style.color = "#047857"; setTimeout(() => { if (statusEl) statusEl.textContent = ""; }, 1500); }
     } else {
-      statusEl.textContent = "❌ " + (json.error || "Ошибка сохранения");
+      if (statusEl) { statusEl.textContent = "⚠"; statusEl.style.color = "#dc2626"; statusEl.title = "Не удалось сохранить"; }
     }
   } catch (err) {
-    statusEl.textContent = "❌ " + err.message;
+    if (statusEl) { statusEl.textContent = "⚠"; statusEl.style.color = "#dc2626"; statusEl.title = err.message; }
   }
 }
 
@@ -1204,8 +1400,9 @@ const KVR_CODES = ["613", "623", "632", "812"];
 // НПТ - в строке 812. Можно поменять вручную на любой из 4 кодов.
 const KVR_DEFAULTS = { rddm_spbguptd: "613", rddm_npt: "812" };
 
-// planningData[subsidyId] = { entries: [ {project,year,month,amount,day,kvr} ] } -
-// локальный кэш того, что реально загружено с сервера для этой субсидии.
+// planningData[subsidyId] = { entries: [ {project,year,month,day,amount,kvr,_docId} ] } -
+// локальный кэш; теперь одна запись = ОДИН платёж, а не весь месяц целиком -
+// это позволяет иметь несколько дат оплаты в одном месяце (нужно для РДДМ).
 let planningData = {};
 let planningLoadedSubsidyId = null; // какая субсидия сейчас реально загружена в кэш
 
@@ -1213,23 +1410,26 @@ let planningSelectedSubsidyId = null; // подставляется в showApp()
 let planningSelectedProjectId = null;
 let planningSelectedYear = new Date().getFullYear();
 
-function emptyPlanMonth(subsidyId) {
-  return { amount: 0, day: "", kvr: KVR_DEFAULTS[subsidyId] || KVR_CODES[0] };
+function isRddmSubsidy(subsidyId) { return subsidyId === "rddm_spbguptd" || subsidyId === "rddm_npt"; }
+
+function emptyPayment(subsidyId) {
+  return { day: "", amount: 0, kvr: KVR_DEFAULTS[subsidyId] || KVR_CODES[0] };
 }
-function getPlanMonths(subsidyId, projectId, year) {
+
+// Возвращает массив платежей за конкретный месяц (может быть несколько для
+// РДДМ, максимум один для ВКМП).
+function getMonthPayments(subsidyId, projectId, year, monthIdx) {
   const cache = planningData[subsidyId];
   const project = findProject(findSubsidy(subsidyId), projectId);
-  const projectName = project ? project.name : null;
-  const months = Array.from({ length: 12 }, () => emptyPlanMonth(subsidyId));
-  if (!cache || !projectName) return months;
-  cache.entries
-    .filter(e => e.project === projectName && String(e.year) === String(year))
-    .forEach(e => {
-      const idx = MONTH_NAMES.indexOf(e.month);
-      if (idx !== -1) months[idx] = { amount: parseFloat(e.amount) || 0, day: e.day || "", kvr: e.kvr || (KVR_DEFAULTS[subsidyId] || KVR_CODES[0]) };
-    });
-  return months;
+  if (!cache || !project) return [];
+  const month = MONTH_NAMES[monthIdx];
+  return cache.entries.filter(e => e.project === project.name && String(e.year) === String(year) && e.month === month);
 }
+// Все месяцы разом - удобно для графика/итогов.
+function getAllMonthsPayments(subsidyId, projectId, year) {
+  return Array.from({ length: 12 }, (_, i) => getMonthPayments(subsidyId, projectId, year, i));
+}
+function monthTotal(payments) { return payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0); }
 
 async function loadPlanningForSubsidy(subsidyId) {
   try {
@@ -1241,30 +1441,51 @@ async function loadPlanningForSubsidy(subsidyId) {
   planningLoadedSubsidyId = subsidyId;
 }
 
-async function savePlanMonth(subsidyId, projectId, year, monthIdx, monthData) {
+// Создаёт новый платёж или обновляет существующий (если передан docId).
+async function savePayment(subsidyId, projectId, year, monthIdx, payment, docId) {
   const subsidy = findSubsidy(subsidyId);
   const project = findProject(subsidy, projectId);
   if (!subsidy || !project) return { success: false, error: "Не выбрана субсидия/проект." };
 
   const month = MONTH_NAMES[monthIdx];
-  // Один документ на комбинацию субсидия+проект+год+месяц - предсказуемый ID,
-  // повторное сохранение того же месяца просто перезаписывает документ, а
-  // не плодит дубликаты.
-  const docId = `${subsidyId}_${project.name}_${year}_${month}`.replace(/[^a-zA-Zа-яА-Я0-9_]/g, "_");
-  const newEntry = { subsidyId, project: project.name, year: String(year), month, amount: monthData.amount, day: monthData.day, kvr: monthData.kvr };
+  const id = docId || `${subsidyId}_${project.name}_${year}_${month}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`.replace(/[^a-zA-Zа-яА-Я0-9_]/g, "_");
+  const entry = { subsidyId, project: project.name, year: String(year), month, day: payment.day || "", amount: parseFloat(payment.amount) || 0, kvr: payment.kvr || (KVR_DEFAULTS[subsidyId] || KVR_CODES[0]) };
 
-  // Обновляем локальный кэш сразу, чтобы интерфейс не ждал ответ сервера
   if (!planningData[subsidyId]) planningData[subsidyId] = { entries: [] };
   const cache = planningData[subsidyId];
-  const existingIdx = cache.entries.findIndex(e => e._docId === docId);
-  if (existingIdx !== -1) cache.entries[existingIdx] = { ...newEntry, _docId: docId }; else cache.entries.push({ ...newEntry, _docId: docId });
+  const existingIdx = cache.entries.findIndex(e => e._docId === id);
+  if (existingIdx !== -1) cache.entries[existingIdx] = { ...entry, _docId: id };
+  else cache.entries.push({ ...entry, _docId: id });
 
   try {
-    await fbDb.collection("planning").doc(docId).set(newEntry);
+    await fbDb.collection("planning").doc(id).set(entry);
+    return { success: true, docId: id };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+async function deletePayment(subsidyId, docId) {
+  const cache = planningData[subsidyId];
+  if (cache) cache.entries = cache.entries.filter(e => e._docId !== docId);
+  try {
+    await fbDb.collection("planning").doc(docId).delete();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
   }
+}
+
+function renderMiniChart(monthlyTotals) {
+  const max = Math.max(1, ...monthlyTotals);
+  const w = 220, h = 60, barW = w / 12 - 3;
+  const bars = monthlyTotals.map((v, i) => {
+    const barH = Math.max(1, (v / max) * (h - 4));
+    const x = i * (w / 12) + 1.5;
+    const y = h - barH;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" fill="var(--accent)" rx="1.5"><title>${MONTH_NAMES[i]}: ${formatRuNumber(v)} руб.</title></rect>`;
+  }).join("");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${bars}</svg>`;
 }
 
 function renderPlanningPage() {
@@ -1277,21 +1498,33 @@ function renderPlanningPage() {
     return `<div class="card card-wide"><h2>Планирование расходов</h2><div class="hint">Загрузка...</div></div>`;
   }
 
-  const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
-  const total = months.reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
-  const isRddm = planningSelectedSubsidyId === "rddm_spbguptd" || planningSelectedSubsidyId === "rddm_npt";
+  const isRddm = isRddmSubsidy(planningSelectedSubsidyId);
+  const allPayments = getAllMonthsPayments(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
+  const monthlyTotals = allPayments.map(monthTotal);
+  const yearTotal = monthlyTotals.reduce((a, b) => a + b, 0);
 
+  // Единая таблица: колонки - месяцы. Для ВКМП - одна сумма без даты, для
+  // РДДМ - можно добавить несколько платежей (дата+сумма) в один месяц.
   const monthCells = MONTH_NAMES.map((name, i) => {
-    const m = months[i] || emptyPlanMonth(planningSelectedSubsidyId);
-    return `
-    <div class="month-cell">
-      <label>${name}</label>
-      <input type="number" data-plan-field="${i}:amount" value="${m.amount || ''}" placeholder="Сумма, руб.">
-      <label style="margin-top:8px">Дата оплаты</label>
-      <input type="number" min="1" max="31" data-plan-field="${i}:day" value="${m.day || ''}" placeholder="Число месяца">
-      <label style="margin-top:8px">КВР</label>
-      <select data-plan-field="${i}:kvr">${KVR_CODES.map(k => `<option value="${k}" ${k===m.kvr?'selected':''}>${k}</option>`).join("")}</select>
-    </div>`;
+    const payments = allPayments[i];
+    if (isRddm) {
+      const paymentRows = payments.map(p => `
+        <div style="display:flex;gap:4px;align-items:center;margin-top:4px">
+          <input type="number" min="1" max="31" data-payment-day="${p._docId}" value="${p.day||''}" placeholder="Дата" style="width:52px;padding:5px 4px;font-size:11px">
+          <input type="number" data-payment-amount="${p._docId}" value="${p.amount||''}" placeholder="Сумма" style="flex:1;padding:5px 4px;font-size:11px">
+          <button class="icon-btn" data-delete-payment="${p._docId}" title="Удалить" style="padding:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>`).join("");
+      return `<td style="min-width:130px;vertical-align:top;padding:8px 6px">
+        ${paymentRows}
+        <button class="btn btn-secondary btn-small" style="margin-top:6px;font-size:11px;padding:4px 8px" data-add-payment="${i}">+ Дата</button>
+        <div style="margin-top:6px;font-size:11px;font-weight:600;color:var(--text-secondary)">Итого: ${formatRuNumber(monthlyTotals[i])}</div>
+      </td>`;
+    }
+    // ВКМП - просто одна сумма на месяц, без даты.
+    const single = payments[0];
+    return `<td style="min-width:110px;padding:8px 6px">
+      <input type="number" data-vkmp-amount="${i}" data-payment-docid="${single ? single._docId : ''}" value="${single ? single.amount || '' : ''}" placeholder="Сумма" style="width:100%">
+    </td>`;
   }).join("");
 
   const monthOptions = MONTH_NAMES.map((name, i) => `<option value="${i}" ${i===new Date().getMonth()?'selected':''}>${name}</option>`).join("");
@@ -1307,17 +1540,26 @@ function renderPlanningPage() {
 
   return `
   <div class="card card-wide">
-    <h2>Планирование расходов</h2>
-    <div class="hint" style="margin-bottom:10px">Изменения сохраняются автоматически в Google Таблице субсидии (лист «Планирование»).</div>
-    <div class="row2">
-      <div><label>Субсидия</label><select id="planningSubsidySelect">${subsidyOptions}</select></div>
-      <div><label>Проект</label><select id="planningProjectSelect">${projectOptions || '<option>Нет проектов</option>'}</select></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:260px">
+        <h2>Планирование расходов</h2>
+        <div class="hint" style="margin-bottom:10px">${isRddm ? "РДДМ: можно добавить несколько дат оплаты в месяц." : "ВКМП: указывается только сумма на месяц, дата не обязательна."} Сохраняется автоматически.</div>
+        <div class="row2">
+          <div><label>Субсидия</label><select id="planningSubsidySelect">${subsidyOptions}</select></div>
+          <div><label>Проект</label><select id="planningProjectSelect">${projectOptions || '<option>Нет проектов</option>'}</select></div>
+        </div>
+        <div style="max-width:160px"><label>Год</label><input type="number" id="planningYearInput" value="${planningSelectedYear}"></div>
+      </div>
+      <div style="text-align:right">
+        <div class="hint" style="margin-bottom:4px">Оплаты по месяцам</div>
+        ${renderMiniChart(monthlyTotals)}
+      </div>
     </div>
-    <div style="max-width:220px"><label>Год</label><input type="number" id="planningYearInput" value="${planningSelectedYear}"></div>
-    <h3>Кассовый план по месяцам</h3>
-    <div id="planSaveStatus" style="font-size:12px;color:#888;min-height:16px"></div>
-    <div class="month-grid">${monthCells}</div>
-    <div style="margin-top:16px;font-size:15px;font-weight:600">Итого за год: ${formatRuNumber(total)} руб.</div>
+    <div id="planSaveStatus" style="font-size:12px;color:var(--text-secondary);min-height:16px;margin-top:10px"></div>
+    <div style="overflow-x:auto;margin-top:8px">
+      <table class="budget-table"><thead><tr>${MONTH_NAMES.map(n=>`<th>${n}</th>`).join("")}</tr></thead><tbody><tr>${monthCells}</tr></tbody></table>
+    </div>
+    <div style="margin-top:16px;font-size:15px;font-weight:600">Итого за год: ${formatRuNumber(yearTotal)} руб.</div>
     ${exportSection}
   </div>`;
 }
@@ -1333,29 +1575,50 @@ function attachPlanningHandlers() {
   if (projSel) projSel.onchange = (e) => { planningSelectedProjectId = e.target.value; renderApp(); };
   document.getElementById("planningYearInput").onchange = (e) => { planningSelectedYear = parseInt(e.target.value) || new Date().getFullYear(); renderApp(); };
 
-  document.querySelectorAll("[data-plan-field]").forEach(inp => {
-    // oninput - для мгновенного пересчёта "Итого" в интерфейсе
-    inp.oninput = () => {
-      if (inp.dataset.planField.endsWith(":amount")) {
-        const monthIdx = parseInt(inp.dataset.planField.split(":")[0]);
-        const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
-        months[monthIdx] = { ...months[monthIdx], amount: parseFloat(inp.value) || 0 };
-        const total = months.reduce((a, m) => a + (parseFloat(m.amount) || 0), 0);
-        const totalEl = [...document.querySelectorAll('.card div')].find(d => d.textContent.includes('Итого за год'));
-        if (totalEl) totalEl.textContent = `Итого за год: ${formatRuNumber(total)} руб.`;
-      }
-    };
-    // onchange (при потере фокуса) - реальное сохранение на сервер, чтобы не
-    // слать запрос на каждое нажатие клавиши.
+  const statusEl = () => document.getElementById("planSaveStatus");
+
+  // ВКМП - одно поле суммы на месяц (создаёт запись при первом вводе, потом обновляет её же).
+  document.querySelectorAll("[data-vkmp-amount]").forEach(inp => {
     inp.onchange = async () => {
-      const [monthIdxStr, field] = inp.dataset.planField.split(":");
-      const monthIdx = parseInt(monthIdxStr);
-      const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
-      const updatedMonth = { ...months[monthIdx], [field]: field === "amount" ? (parseFloat(inp.value) || 0) : inp.value };
-      const statusEl = document.getElementById("planSaveStatus");
-      if (statusEl) statusEl.textContent = "Сохраняю...";
-      const result = await savePlanMonth(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, monthIdx, updatedMonth);
-      if (statusEl) statusEl.textContent = result.success ? "✅ Сохранено" : "❌ " + (result.error || "Ошибка сохранения");
+      const monthIdx = parseInt(inp.dataset.vkmpAmount);
+      const docId = inp.dataset.paymentDocid || null;
+      const amount = parseFloat(inp.value) || 0;
+      if (statusEl()) statusEl().textContent = "Сохраняю...";
+      const result = await savePayment(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, monthIdx, { day: "", amount, kvr: KVR_DEFAULTS[planningSelectedSubsidyId] }, docId);
+      if (statusEl()) statusEl().textContent = result.success ? "✅ Сохранено" : "❌ " + (result.error || "Ошибка");
+      renderApp();
+    };
+  });
+
+  // РДДМ - дата и сумма для существующего платежа.
+  document.querySelectorAll("[data-payment-day], [data-payment-amount]").forEach(inp => {
+    inp.onchange = async () => {
+      const docId = inp.dataset.paymentDay || inp.dataset.paymentAmount;
+      const cache = planningData[planningSelectedSubsidyId];
+      const entry = cache ? cache.entries.find(e => e._docId === docId) : null;
+      if (!entry) return;
+      const day = inp.dataset.paymentDay ? inp.value : entry.day;
+      const amount = inp.dataset.paymentAmount ? (parseFloat(inp.value) || 0) : entry.amount;
+      const monthIdx = MONTH_NAMES.indexOf(entry.month);
+      if (statusEl()) statusEl().textContent = "Сохраняю...";
+      const result = await savePayment(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, monthIdx, { day, amount, kvr: entry.kvr }, docId);
+      if (statusEl()) statusEl().textContent = result.success ? "✅ Сохранено" : "❌ " + (result.error || "Ошибка");
+      renderApp();
+    };
+  });
+
+  document.querySelectorAll("[data-add-payment]").forEach(btn => {
+    btn.onclick = async () => {
+      const monthIdx = parseInt(btn.dataset.addPayment);
+      await savePayment(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, monthIdx, emptyPayment(planningSelectedSubsidyId));
+      renderApp();
+    };
+  });
+
+  document.querySelectorAll("[data-delete-payment]").forEach(btn => {
+    btn.onclick = async () => {
+      await deletePayment(planningSelectedSubsidyId, btn.dataset.deletePayment);
+      renderApp();
     };
   });
 
@@ -1449,15 +1712,16 @@ async function handleExportCashPlan() {
     return;
   }
 
-  const months = getPlanMonths(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear);
-  const monthData = months[monthIdx];
-  if (!monthData || !monthData.amount || !monthData.day) {
-    statusEl.textContent = "⚠️ Для выбранного месяца не заполнена сумма или дата оплаты.";
+  const payments = getMonthPayments(planningSelectedSubsidyId, planningSelectedProjectId, planningSelectedYear, monthIdx)
+    .filter(p => p.amount && p.day);
+  if (!payments.length) {
+    statusEl.textContent = "⚠️ Для выбранного месяца не заполнена ни одна дата оплаты с суммой.";
     return;
   }
 
   const grant = GRANTS[planningSelectedSubsidyId];
   const dateParts = parseDateToRuParts(grant.grant_agreement_date);
+  const monthTotalAmount = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
 
   const data = {
     grant_agreement_number: grant.grant_agreement_number,
@@ -1466,18 +1730,27 @@ async function handleExportCashPlan() {
     grant_agreement_year: dateParts.year,
     plan_month_name: MONTH_NAMES[monthIdx],
     plan_year: String(planningSelectedYear),
-    plan_amount_numeric: formatRuNumber(monthData.amount),
-    plan_amount_words: amountToWordsRu(Math.floor(monthData.amount)),
+    plan_amount_numeric: formatRuNumber(monthTotalAmount),
+    plan_amount_words: amountToWordsRu(Math.floor(monthTotalAmount)),
   };
   // Заполняем все 132 ячейки таблицы (4 кода КВР × 31 день + Итого) -
-  // пустыми по умолчанию, кроме выбранного дня/кода за этот месяц.
+  // пустыми по умолчанию, кроме тех дней/кодов, где реально указаны платежи
+  // за этот месяц (может быть несколько дат в одном месяце для РДДМ).
   for (const kvr of ["613", "623", "632", "812"]) {
     for (let d = 1; d <= 31; d++) data[`kvr${kvr}_day${d}`] = "";
     data[`kvr${kvr}_total`] = "";
   }
-  const day = parseInt(monthData.day);
-  data[`kvr${monthData.kvr}_day${day}`] = formatRuNumber(monthData.amount);
-  data[`kvr${monthData.kvr}_total`] = formatRuNumber(monthData.amount);
+  const totalsByKvr = {};
+  payments.forEach(p => {
+    const day = parseInt(p.day);
+    const kvr = p.kvr || "613";
+    const existing = parseRuNumber(data[`kvr${kvr}_day${day}`] || "0");
+    data[`kvr${kvr}_day${day}`] = formatRuNumber(existing + (parseFloat(p.amount) || 0));
+    totalsByKvr[kvr] = (totalsByKvr[kvr] || 0) + (parseFloat(p.amount) || 0);
+  });
+  for (const kvr of Object.keys(totalsByKvr)) {
+    data[`kvr${kvr}_total`] = formatRuNumber(totalsByKvr[kvr]);
+  }
 
   statusEl.textContent = "Готовлю файл...";
   try {
@@ -2154,7 +2427,9 @@ function renderStep1() {
     { type: "rental_400", variant: "ip", label: "Аренда — ИП" },
   ];
   const grantWarning = state.grantId && GRANTS[state.grantId]._warning ? `<div class="warning-box">⚠️ ${GRANTS[state.grantId]._warning}</div>` : "";
+  const draftNotice = state.contractType ? `<div class="hint" style="margin-bottom:14px">Черновик заполнен ранее и сохранён автоматически. <span style="text-decoration:underline;cursor:pointer;color:var(--accent)" id="resetDraftLink">Начать новый договор с чистого листа</span></div>` : "";
   return `<div class="card"><h2>Шаг 1 — Тип договора и грант</h2>
+  ${draftNotice}
   <label class="required">Тип договора и контрагента</label>
   <div class="radio-group" id="typeOptions">${typeOptions.map(o => `<div class="radio-option ${state.contractType===o.type && state.contractorVariant===o.variant?'selected':''}" data-type="${o.type}" data-variant="${o.variant}">${o.label}</div>`).join("")}</div>
   <label class="required">Грант</label>
@@ -2174,17 +2449,30 @@ function renderStep2() {
   return `<div class="card"><h2>Шаг 2 — Стороны (${CONTRACT_CONFIGS[configKey()].roleLabels.contractor})</h2>
   ${registryHtml}<h3>Реквизиты</h3>${fieldsHtml}
   <div class="checkbox-row"><input type="checkbox" id="notEmployeeCheck" ${state.notEmployeeConfirmed?'checked':''}><label for="notEmployeeCheck" class="required">Подтверждаю: контрагент не является сотрудником/студентом СПбГУПТД</label></div>
+  <button class="btn btn-secondary btn-small" style="margin-top:20px" id="addContractorBtn">+ Добавить исполнителя в справочник</button>
   </div><div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><button class="btn btn-primary" id="nextBtn">Далее →</button></div>`;
 }
 
 function renderStep3() {
   const config = currentConfig();
-  const bodyHtml = config.bodyFields.map(f => `<label class="required">${BODY_FIELD_LABELS[f]||f}</label><input type="text" required data-body-field="${f}" value="${state.bodyValues[f]||''}">`).join("");
+  const bodyHtml = config.bodyFields.map(f => `<label class="required">${BODY_FIELD_LABELS[f]||f}</label>${renderBodyFieldInput(f)}`).join("");
+  const vatOptions = [
+    ["none", "Без НДС (НДС не облагается)"],
+    ["included", "НДС включён в сумму договора"],
+  ];
   return `<div class="card"><h2>Шаг 3 — Тело договора</h2>
   <div class="row2"><div><label class="required">Номер договора</label><input type="text" required id="contractNumber" value="${state.contractNumber}" placeholder="напр. РОСМОЛ-08-2026"></div><div><label class="required">Дата договора</label><input type="text" required id="contractDate" value="${state.contractDate}" placeholder="напр. 10.08.2026"></div></div>
   <label>Пункт Положения о закупке</label><input type="text" id="polozhenieClause" value="${state.polozhenieClause}">
   <h3>Предмет и сроки</h3>${bodyHtml}
-  <h3>Оплата</h3><label>НДС</label><input type="text" id="vatClause" value="${state.vatClause}"><div class="hint">Сумма договора считается автоматически из строк таблиц на следующем шаге.</div>
+  <h3>Оплата</h3>
+  <label>НДС</label>
+  <select id="vatMode">${vatOptions.map(([v,l]) => `<option value="${v}" ${state.vatMode===v?'selected':''}>${l}</option>`).join("")}</select>
+  <div id="vatRateBlock" style="${state.vatMode==='included'?'':'display:none'}">
+    <label>Ставка НДС, %</label>
+    <input type="number" id="vatRate" value="${state.vatRate||20}" style="max-width:140px">
+    <div class="hint" id="vatCalcPreview"></div>
+  </div>
+  <div class="hint">Сумма договора считается автоматически из строк таблиц на следующем шаге.</div>
   </div><div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><button class="btn btn-primary" id="nextBtn">Далее →</button></div>`;
 }
 
@@ -2192,6 +2480,8 @@ function renderStep4() {
   ensureAppendices();
   const config = currentConfig();
   const isRental = state.contractType === "rental_400";
+  const canAddMore = state.appendices.length < config.appendixCount;
+  const canRemove = state.appendices.length > 1;
   const appendixBlocks = state.appendices.map((appendix, aIdx) => {
     const fieldsHtml = config.appendixFields.map(f => `<label class="required">${APPENDIX_FIELD_LABELS[f]||f}</label><input type="text" required data-appendix-idx="${aIdx}" data-appendix-field="${f}" value="${appendix.values[f]||''}">`).join("");
     const rowsHtml = appendix.rows.map((row, rIdx) => `<tr>${config.rowFields.map(f => {
@@ -2203,8 +2493,12 @@ function renderStep4() {
       return `<td><input type="text" ${readonly} ${requiredAttr} data-a="${aIdx}" data-r="${rIdx}" data-f="${f.name}" ${calcAttr} value="${row[f.name]||''}"></td>`;
     }).join("")}<td><button class="btn-danger-text" data-remove-row="${aIdx}:${rIdx}">✕</button></td></tr>`).join("");
     const totalLabel = isRental ? "" : `<label>Итог приложения, руб. <small class="gray">(считается автоматически)</small></label><div id="appendixTotalDisplay-${aIdx}" style="font-weight:600;font-size:15px;padding:6px 0">${formatRuNumber(computeAppendixTotalRub(appendix, config))} руб.</div>`;
-    return `<div class="appendix-block"><h4>Приложение ${aIdx+1}</h4>${fieldsHtml}<table class="row-table"><thead><tr>${config.rowFields.map(f=>`<th>${f.label}</th>`).join("")}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table><button class="btn btn-secondary" style="margin-top:8px;font-size:12px;padding:6px 12px" data-add-row="${aIdx}">+ Добавить строку</button>${totalLabel}</div>`;
+    const removeBtn = canRemove ? `<button class="btn-danger-text" data-remove-appendix="${aIdx}" style="float:right">✕ Удалить приложение</button>` : "";
+    const smetaPickerBtn = smetaItemsAvailable() ? `<button class="btn btn-secondary btn-small" style="margin-left:8px" data-pick-from-smeta="${aIdx}">Добавить из сметы</button>` : "";
+    return `<div class="appendix-block"><h4>Приложение ${aIdx+1}${removeBtn}</h4>${fieldsHtml}<table class="row-table"><thead><tr>${config.rowFields.map(f=>`<th>${f.label}</th>`).join("")}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table><button class="btn btn-secondary" style="margin-top:8px;font-size:12px;padding:6px 12px" data-add-row="${aIdx}">+ Добавить строку</button>${smetaPickerBtn}${totalLabel}</div>`;
   }).join("");
+
+  const addAppendixBtn = canAddMore ? `<button class="btn btn-secondary" style="margin-bottom:16px" id="addAppendixBtn">+ Добавить приложение</button>` : "";
 
   const rentalBlock = isRental ? `<div class="card"><h3>Итоги по аренде</h3>
     <label class="required">Количество дней аренды</label>
@@ -2214,7 +2508,7 @@ function renderStep4() {
       <div><label>ИТОГО за весь срок <small class="gray">(авто)</small></label><div id="rentalTotalDisplay" style="font-weight:600;padding:6px 0">${formatRuNumber(computeContractTotalRub(state, config))} руб.</div></div>
     </div></div>` : "";
 
-  return `<div class="card"><h2>Шаг 4 — Приложения (${config.appendixCount})</h2><div class="hint">Сумма строки = количество × цена, считается автоматически. Просто впишите количество и цену.</div>${appendixBlocks}</div>${rentalBlock}
+  return `<div class="card"><h2>Шаг 4 — Приложения (${state.appendices.length} из ${config.appendixCount})</h2><div class="hint">Сумма строки = количество × цена, считается автоматически. Просто впишите количество и цену.</div>${appendixBlocks}${addAppendixBtn}</div>${rentalBlock}
   <div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><button class="btn btn-primary" id="nextBtn">Далее →</button></div>`;
 }
 
@@ -2238,16 +2532,83 @@ function attachHandlers() {
   if (currentStep === 0) {
     document.querySelectorAll("#typeOptions .radio-option").forEach(el => { el.onclick = () => { state.contractType = el.dataset.type; state.contractorVariant = el.dataset.variant; state.appendices = []; renderApp(); }; });
     document.getElementById("grantSelect").onchange = (e) => { state.grantId = e.target.value; };
+    const resetLink = document.getElementById("resetDraftLink");
+    if (resetLink) resetLink.onclick = () => {
+      if (confirm("Стереть текущий черновик договора и начать заново?")) { resetDraft(); renderApp(); }
+    };
   }
   if (currentStep === 1) {
     document.querySelectorAll(".contractor-card").forEach(el => { el.onclick = () => { const c = CONTRACTORS_REGISTRY.find(x => x.id === el.dataset.contractorId); state.selectedContractorId = c.id; state.contractor = { ...c }; delete state.contractor.id; delete state.contractor.type; delete state.contractor.short_name; renderApp(); }; });
+    const addContractorBtn = document.getElementById("addContractorBtn");
+    if (addContractorBtn) addContractorBtn.onclick = () => {
+      const variant = state.contractorVariant;
+      const fields = CONTRACTOR_FIELD_SETS[variant] || [];
+      const extraFieldsHtml = fields.map(f => `<label class="required">${f.label}</label><input type="text" id="newC_${f.name}">`).join("");
+      showModal("Новый исполнитель в справочнике", `
+        <label class="required">Короткое имя для списка</label>
+        <input type="text" id="newC_short_name" placeholder="напр. ИП Иванов И.И.">
+        <label class="required">ФИО/название для подписи в документах</label>
+        <input type="text" id="newC_document_signature_name" placeholder="напр. ИП Иванов Иван Иванович">
+        <h3>Реквизиты</h3>
+        ${extraFieldsHtml}
+      `, async () => {
+        const shortName = document.getElementById("newC_short_name").value.trim();
+        const docSigName = document.getElementById("newC_document_signature_name").value.trim();
+        if (!shortName) return false;
+        const contractor = { id: "c_" + Date.now(), type: variant, short_name: shortName, document_signature_name: docSigName };
+        fields.forEach(f => { contractor[f.name] = document.getElementById(`newC_${f.name}`).value.trim(); });
+        await addContractorToRegistry(contractor);
+        renderApp();
+        return true;
+      });
+    };
+  }
+  if (currentStep === 2) {
+    const vatModeEl = document.getElementById("vatMode");
+    const vatRateEl = document.getElementById("vatRate");
+    const updateVatPreview = () => {
+      const previewEl = document.getElementById("vatCalcPreview");
+      if (!previewEl) return;
+      const config = currentConfig();
+      const total = computeContractTotalRub(state, config);
+      const rate = parseFloat(vatRateEl ? vatRateEl.value : 20) || 0;
+      const vatAmount = total - total / (1 + rate / 100);
+      previewEl.textContent = total > 0
+        ? `При сумме договора ${formatRuNumber(total)} руб.: НДС ${rate}% составит ${formatRuNumber(vatAmount)} руб. (сумма уже включает НДС, отдельно сверху не добавляется).`
+        : "Сумма договора появится после заполнения приложений на следующем шаге.";
+    };
+    if (vatModeEl) vatModeEl.onchange = () => {
+      const block = document.getElementById("vatRateBlock");
+      if (block) block.style.display = vatModeEl.value === "included" ? "" : "none";
+      updateVatPreview();
+    };
+    if (vatRateEl) vatRateEl.oninput = updateVatPreview;
+    updateVatPreview();
   }
   if (currentStep === 3) {
     document.querySelectorAll("[data-add-row]").forEach(btn => { btn.onclick = () => { const aIdx = parseInt(btn.dataset.addRow); state.appendices[aIdx].rows.push(emptyRow(currentConfig())); renderApp(); }; });
     document.querySelectorAll("[data-remove-row]").forEach(btn => { btn.onclick = () => { const [aIdx, rIdx] = btn.dataset.removeRow.split(":").map(Number); if (state.appendices[aIdx].rows.length > 1) state.appendices[aIdx].rows.splice(rIdx, 1); renderApp(); }; });
+    const addAppendixBtn = document.getElementById("addAppendixBtn");
+    if (addAppendixBtn) addAppendixBtn.onclick = () => {
+      const config = currentConfig();
+      state.appendices.push({ values: {}, totalRub: 0, rows: [emptyRow(config)] });
+      renderApp();
+    };
+    document.querySelectorAll("[data-remove-appendix]").forEach(btn => {
+      btn.onclick = () => {
+        const aIdx = parseInt(btn.dataset.removeAppendix);
+        if (state.appendices.length > 1 && confirm("Удалить это приложение вместе со всеми его строками?")) {
+          state.appendices.splice(aIdx, 1);
+          renderApp();
+        }
+      };
+    });
     document.querySelectorAll("[data-calc-row]").forEach(inp => { inp.oninput = () => recalcRowLive(parseInt(inp.dataset.calcRow)); });
     const rentalDaysEl = document.getElementById("rentalDays");
     if (rentalDaysEl) rentalDaysEl.oninput = recalcRentalLive;
+    document.querySelectorAll("[data-pick-from-smeta]").forEach(btn => {
+      btn.onclick = () => openSmetaPickerModal(parseInt(btn.dataset.pickFromSmeta));
+    });
   }
   if (currentStep === 4) { const genBtn = document.getElementById("generateBtn"); if (genBtn) genBtn.onclick = handleGenerate; }
 }
@@ -2262,7 +2623,9 @@ function saveCurrentStep() {
     state.contractDate = document.getElementById("contractDate").value;
     state.polozhenieClause = document.getElementById("polozhenieClause").value;
     document.querySelectorAll("[data-body-field]").forEach(inp => { state.bodyValues[inp.dataset.bodyField] = inp.value; });
-    state.vatClause = document.getElementById("vatClause").value;
+    state.vatMode = document.getElementById("vatMode").value;
+    const vatRateEl = document.getElementById("vatRate");
+    if (vatRateEl) state.vatRate = parseFloat(vatRateEl.value) || 20;
   }
   if (currentStep === 3) {
     document.querySelectorAll("[data-appendix-idx]").forEach(inp => { const aIdx = parseInt(inp.dataset.appendixIdx); state.appendices[aIdx].values[inp.dataset.appendixField] = inp.value; });
@@ -2291,6 +2654,7 @@ async function handleGenerate() {
       document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
       resultBox.className = "success";
       resultBox.textContent = "✅ Готово! Файл " + payload.fileName + " должен был начать скачиваться.\n\nПроверьте папку «Загрузки» и вручную перенесите файл в нужную папку на Google Диске.";
+      clearDraft();
     } else {
       const text = await res.text();
       resultBox.className = "error"; resultBox.textContent = "❌ ОШИБКА\n\nHTTP статус: " + res.status + "\n\n" + text;
@@ -2461,9 +2825,11 @@ function handleLogout() {
   renderLoginScreen();
 }
 
-function showApp() {
+async function showApp() {
   document.getElementById("loginScreen").style.display = "none";
   document.getElementById("appContainer").style.display = "flex";
+
+  if (!subsidiesLoadedFromFirestore) await loadSubsidiesFromFirestore();
 
   // Скрываем в меню разделы, недоступные текущему пользователю; если
   // текущая страница вдруг недоступна - переключаемся на первую доступную.
