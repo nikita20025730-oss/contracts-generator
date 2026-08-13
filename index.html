@@ -2370,22 +2370,36 @@ function renderTaskRow(t, showListTag) {
 let dashboardShowArchive = false;
 let dashboardShowHidden = false;
 
+// Список всех известных списков + владелец каждого - используется и при
+// отрисовке дашборда, и при выгрузке отчёта, чтобы логика "какие списки
+// мои" НЕ расходилась между экраном и отчётом (именно расхождение этой
+// логики раньше приводило к тому, что архив показывал задачу, а отчёт
+// говорил "задач нет" - отчёт использовал более узкий фильтр).
+function getAllListsWithOwners() {
+  const listsFromTasks = [...new Set(tasksCache.map(t => t.list))].filter(name => !knownListsCache.some(l => l.name === name));
+  return [...knownListsCache, ...listsFromTasks.map(name => ({ name, color: LIST_COLORS[0], description: "", createdBy: null }))];
+}
+function getMyOwnedLists() {
+  return getAllListsWithOwners().filter(l => !l.createdBy || sameUsername(l.createdBy, currentUser.username));
+}
+
 function renderDashboardPage() {
   if (!tasksLoaded) return `<div class="card"><h2>Дашборд</h2><div class="hint">Загрузка...</div></div>`;
 
-  const listsFromTasks = [...new Set(tasksCache.map(t => t.list))].filter(name => !knownListsCache.some(l => l.name === name));
-  const allLists = [...knownListsCache, ...listsFromTasks.map(name => ({ name, color: LIST_COLORS[0], description: "", createdBy: null }))];
+  const allLists = getAllListsWithOwners();
 
   const hiddenListsCount = allLists.filter(l => l.hidden).length;
   const hiddenTasksCount = tasksCache.filter(t => t.hidden).length;
 
-  // "Мои списки" - списки, которые создал сам пользователь (списки без
-  // createdBy - старые данные, заведённые до этой доработки; их владельца
-  // можно назначить вручную в форме редактирования списка). Скрытые списки
-  // не показываются, пока не включена кнопка "Показать скрытые".
-  const myLists = allLists.filter(l =>
-    (!l.createdBy || sameUsername(l.createdBy, currentUser.username)) && (dashboardShowHidden || !l.hidden)
-  );
+  // ВАЖНО: "владение" списком (кто его создал) и "показывать ли карточкой
+  // на дашборде" - это ДВЕ РАЗНЫЕ вещи. Раньше они были смешаны в одном
+  // фильтре, из-за чего скрытый список переставал считаться "моим" даже
+  // для архива/отчёта - хотя скрытие должно влиять только на то, видна ли
+  // карточка списка, а не на то, чьи в нём задачи.
+  const ownedLists = getMyOwnedLists(); // для проверки владения (архив, отчёт) - без учёта "скрыт"
+  // Список карточек ("Мои списки"), которые реально показываются на экране
+  // - скрытые убираем, пока не включена кнопка "Показать скрытые".
+  const myLists = ownedLists.filter(l => dashboardShowHidden || !l.hidden);
   // Чужие списки - нужны, чтобы найти в них задачи, назначенные на меня
   // (раздел "Назначенные").
   const otherLists = allLists.filter(l => l.createdBy && !sameUsername(l.createdBy, currentUser.username));
@@ -2396,7 +2410,7 @@ function renderDashboardPage() {
   // в списках, которые я создал (по той же логике, что "Мои списки"
   // показывают все задачи внутри своих списков, а не только свои).
   const archivedTasks = tasksCache.filter(t =>
-    t.status === "Готово" && (sameUsername(t.assignee, currentUser.username) || myLists.some(l => l.name === t.list))
+    t.status === "Готово" && (sameUsername(t.assignee, currentUser.username) || ownedLists.some(l => l.name === t.list))
   );
   const todayTasks = tasksCache.filter(t => t.today && t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) && (dashboardShowHidden || !t.hidden));
 
@@ -2498,9 +2512,10 @@ async function handleExportTasksReport() {
   const includeCalendar = document.getElementById("reportIncludeCalendar").checked;
   if (!from || !to) { statusEl.textContent = "⚠️ Укажите обе даты периода."; return; }
 
+  const ownedLists = getMyOwnedLists();
   const completed = tasksCache.filter(t =>
     t.status === "Готово" && t.completedAt && t.completedAt >= from && t.completedAt <= to &&
-    sameUsername(t.assignee, currentUser.username)
+    (sameUsername(t.assignee, currentUser.username) || ownedLists.some(l => l.name === t.list))
   );
 
   let events = [];
@@ -2514,6 +2529,7 @@ async function handleExportTasksReport() {
       const json = await res.json();
       if (res.ok && json.success) {
         events = json.events;
+        if (json.warning) statusEl.textContent = "⚠️ " + json.warning;
       } else {
         statusEl.textContent = "⚠️ Не удалось получить календарь iCloud: " + (json.error || "неизвестная ошибка") + ". Отчёт будет собран без событий.";
       }
