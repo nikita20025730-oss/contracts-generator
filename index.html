@@ -119,6 +119,15 @@
   label.required::after { content: " *"; color: var(--accent); }
   input[type=text], input[type=number], input[type=password], select, textarea { width: 100%; padding: 9px 10px; font-size: 14px; border: 1px solid var(--border-strong); border-radius: 8px; font-family: inherit; background: var(--input-bg); color: var(--text); }
   input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  /* Календарь (input type=date) - браузер не даёт полностью переделать сам
+     всплывающий календарь, но можно привести в порядок само поле и
+     значок-иконку, чтобы они не выбивались из темы приложения (в тёмной
+     теме нативная чёрная иконка была бы не видна на тёмном фоне). */
+  input[type=date] { color-scheme: light; position: relative; }
+  html[data-theme="dark"] input[type=date] { color-scheme: dark; }
+  input[type=date]::-webkit-calendar-picker-indicator { cursor: pointer; border-radius: 4px; padding: 3px; filter: none; }
+  html[data-theme="dark"] input[type=date]::-webkit-calendar-picker-indicator { filter: invert(1); }
+  input[type=date]::-webkit-calendar-picker-indicator:hover { background: var(--nav-hover); }
   select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; }
   select option { background: var(--card-bg); color: var(--text); }
   textarea { min-height: 60px; resize: vertical; }
@@ -159,10 +168,10 @@
   .subsidy-block h3 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; }
   .project-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); border-radius: 16px; padding: 5px 12px; font-size: 12px; margin: 4px 6px 4px 0; cursor: pointer; color: var(--text); }
   .project-chip.selected { background: var(--accent); color: white; border-color: var(--accent); }
-  .budget-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 12px; }
-  .budget-table input, .budget-table select, .budget-table textarea { font-size: 11px !important; }
-  .budget-table th, .budget-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; vertical-align: top; }
-  .budget-table th { background: var(--nav-hover); }
+  .budget-table { width: auto; min-width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 12px; table-layout: auto; }
+  .budget-table input, .budget-table select, .budget-table textarea { font-size: 11px !important; width: 100%; min-width: 90px; box-sizing: border-box; }
+  .budget-table th, .budget-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: left; vertical-align: top; min-width: 100px; max-width: 260px; }
+  .budget-table th { background: var(--nav-hover); white-space: normal; }
   .budget-table tr:hover { background: var(--nav-hover); }
   .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
   .month-cell { border: 1px solid var(--border-strong); border-radius: 10px; padding: 10px; }
@@ -1216,10 +1225,23 @@ function computeColumnSpans(items, columns) {
   // предыдущей(-их) строке(-ах) для этой же колонки уже было значение —
   // считаем это продолжением объединённой ячейки Google Таблицы и не
   // выводим её отдельно, увеличивая rowspan исходной ячейки.
+  //
+  // ВАЖНО: строки-маркеры ("Итого"/"Всего") рендерятся отдельно, целой
+  // строкой на всю ширину таблицы (см. renderBudgetTable) - если бы они
+  // участвовали в подсчёте объединений наравне с обычными строками, пустые
+  // ячейки маркерной строки ошибочно "склеивались" бы с объединением из
+  // предыдущей обычной строки, ломая структуру таблицы для всех строк
+  // после маркера. Поэтому маркерная строка обрывает цепочку объединения
+  // (как будто её вообще нет между обычными строками).
   const spans = items.map(() => ({}));
   columns.forEach(col => {
     let lastNonEmptyIdx = null;
     items.forEach((item, i) => {
+      if (item._isMarkerRow) {
+        spans[i][col] = { skip: false, rowspan: 1 };
+        lastNonEmptyIdx = null;
+        return;
+      }
       const val = item[col];
       const isEmpty = val === undefined || val === null || String(val).trim() === "";
       if (isEmpty && lastNonEmptyIdx !== null) {
@@ -1294,8 +1316,14 @@ function renderBudgetTable() {
       // Строки "Итого"/"Всего" - показываем выделенным, нередактируемым
       // рядом (не полем ввода), чтобы визуально сразу читалось как итог,
       // а не как обычная позиция сметы.
-      const label = Object.values(item).find(v => v && String(v).trim() !== "" && !String(v).startsWith("_")) || "Итого";
-      const numericValues = columns.map(c => item[c]).filter(v => v && String(v).trim() !== "" && v !== label);
+      // ВАЖНО: берём значения СТРОГО по списку колонок таблицы (columns) -
+      // а не Object.values(item) целиком, иначе в подпись/суммы случайно
+      // попадают служебные поля объекта (_row, _isMarkerRow и т.п.), что
+      // ломало отображение этой строки.
+      const columnValues = columns.map(c => (item[c] || "").toString().trim()).filter(v => v !== "");
+      const labelIdx = columnValues.findIndex(v => /итого|всего/i.test(v));
+      const label = labelIdx !== -1 ? columnValues[labelIdx] : (columnValues[0] || "Итого");
+      const numericValues = columnValues.filter((v, i) => i !== (labelIdx !== -1 ? labelIdx : 0));
       return `<tr style="background:var(--nav-hover);font-weight:700">
         <td colspan="${Math.max(1, columns.length - numericValues.length)}">${label}</td>
         ${numericValues.map(v => `<td>${v}</td>`).join("")}
@@ -2281,11 +2309,33 @@ function daysUntilDeadline(dueDateIso) {
 function deadlineHighlight(dueDateIso, status) {
   if (!dueDateIso || status === "Готово") return null;
   const days = daysUntilDeadline(dueDateIso);
-  if (days === 0) return { bg: "#fee2e2", tagBg: "#dc2626", tagColor: "#ffffff", label: "Сегодня срок" };
-  if (days === 1) return { bg: "#fed7aa", tagBg: "#f97316", tagColor: "#ffffff", label: "1 день" };
-  if (days === 2) return { bg: "#fef08a", tagBg: "#eab308", tagColor: "#78350f", label: "2 дня" };
-  if (days === 3) return { bg: "#fef9c3", tagBg: "#fde047", tagColor: "#78350f", label: "3 дня" };
+  // ВАЖНО: фон подсветки всегда светлый пастельный - поэтому текст поверх
+  // него должен быть ТЁМНЫМ всегда, независимо от текущей темы приложения
+  // (светлая/тёмная). Раньше текст наследовал общий цвет темы (в тёмной
+  // теме - белый), из-за чего на светлом фоне подсветки становился
+  // нечитаемым.
+  const darkText = "#3f1a12";
+  if (days === 0) return { bg: "#fee2e2", text: darkText, tagBg: "#dc2626", tagColor: "#ffffff", label: "Сегодня срок" };
+  if (days === 1) return { bg: "#fed7aa", text: darkText, tagBg: "#f97316", tagColor: "#ffffff", label: "1 день" };
+  if (days === 2) return { bg: "#fef08a", text: darkText, tagBg: "#eab308", tagColor: "#78350f", label: "2 дня" };
+  if (days === 3) return { bg: "#fef9c3", text: darkText, tagBg: "#fde047", tagColor: "#78350f", label: "3 дня" };
   return null;
+}
+
+// Инициалы для компактного "аватара" исполнителя - вместо полного имени,
+// которое при длинном ФИО наезжало на соседний текст задачи.
+function initialsFor(username) {
+  const name = displayNameFor(username);
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+function avatarColorFor(username) {
+  // Стабильный цвет по логину - один и тот же человек всегда получает один
+  // и тот же цвет аватара, вычисляется без внешних зависимостей.
+  let hash = 0;
+  for (const ch of String(username || "")) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${hash}, 55%, 45%)`;
 }
 
 function renderTaskRow(t, showListTag) {
@@ -2293,11 +2343,12 @@ function renderTaskRow(t, showListTag) {
   const sc = statusColor(t.status, list && list.color);
   const listTag = showListTag && list ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary)"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}</span>` : "";
   const dl = deadlineHighlight(t.dueDate, t.status);
-  const rowStyle = dl ? `background:${dl.bg};border-radius:8px;padding-left:8px;padding-right:8px` : "";
+  const rowStyle = dl ? `background:${dl.bg};color:${dl.text};border-radius:8px;padding-left:8px;padding-right:8px` : "";
   const dueDisplay = t.status === "Готово" && t.completedAt
     ? `<span title="Дата выполнения">✓ ${isoToRuDate(t.completedAt)}</span>`
     : (t.dueDate ? `<span>${isoToRuDate(t.dueDate)}</span>` : "");
   const deadlineTag = dl ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;background:${dl.tagBg};color:${dl.tagColor}">${dl.label}</span>` : "";
+  const assigneeAvatar = t.assignee ? `<span title="${displayNameFor(t.assignee)}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${avatarColorFor(t.assignee)};color:#fff;font-size:10px;font-weight:700;flex-shrink:0">${initialsFor(t.assignee)}</span>` : "";
   return `<div class="task-row ${t.status==='Готово'?'task-done':''}" style="${rowStyle}">
     <span class="status-badge" data-cycle-status="${t.id}" style="background:${sc.bg};color:${sc.color}">${t.status}</span>
     ${deadlineTag}
@@ -2307,7 +2358,7 @@ function renderTaskRow(t, showListTag) {
       ${listTag ? `<div style="margin-top:4px">${listTag}</div>` : ""}
     </div>
     <div class="task-meta">
-      ${t.assignee ? `<span>${displayNameFor(t.assignee)}</span>` : ""}
+      ${assigneeAvatar}
       ${dueDisplay}
       <span class="today-toggle ${t.today ? 'on' : ''}" data-toggle-today="${t.id}" title="Сегодня"></span>
       <button class="icon-btn" data-edit-task="${t.id}" title="Редактировать"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
@@ -2317,6 +2368,7 @@ function renderTaskRow(t, showListTag) {
 }
 
 let dashboardShowArchive = false;
+let dashboardShowHidden = false;
 
 function renderDashboardPage() {
   if (!tasksLoaded) return `<div class="card"><h2>Дашборд</h2><div class="hint">Загрузка...</div></div>`;
@@ -2324,26 +2376,37 @@ function renderDashboardPage() {
   const listsFromTasks = [...new Set(tasksCache.map(t => t.list))].filter(name => !knownListsCache.some(l => l.name === name));
   const allLists = [...knownListsCache, ...listsFromTasks.map(name => ({ name, color: LIST_COLORS[0], description: "", createdBy: null }))];
 
+  const hiddenListsCount = allLists.filter(l => l.hidden).length;
+  const hiddenTasksCount = tasksCache.filter(t => t.hidden).length;
+
   // "Мои списки" - списки, которые создал сам пользователь (списки без
   // createdBy - старые данные, заведённые до этой доработки; их владельца
-  // можно назначить вручную в форме редактирования списка).
-  const myLists = allLists.filter(l => !l.createdBy || sameUsername(l.createdBy, currentUser.username));
+  // можно назначить вручную в форме редактирования списка). Скрытые списки
+  // не показываются, пока не включена кнопка "Показать скрытые".
+  const myLists = allLists.filter(l =>
+    (!l.createdBy || sameUsername(l.createdBy, currentUser.username)) && (dashboardShowHidden || !l.hidden)
+  );
   // Чужие списки - нужны, чтобы найти в них задачи, назначенные на меня
   // (раздел "Назначенные").
   const otherLists = allLists.filter(l => l.createdBy && !sameUsername(l.createdBy, currentUser.username));
 
   // Выполненные задачи ("Готово") автоматически уходят из "Сегодня" и из
   // обычных списков проекта - они видны только в архиве внизу страницы.
-  const archivedTasks = tasksCache.filter(t => t.status === "Готово" && sameUsername(t.assignee, currentUser.username));
-  const todayTasks = tasksCache.filter(t => t.today && t.status !== "Готово" && sameUsername(t.assignee, currentUser.username));
+  // В архив попадают задачи, назначенные на меня, ИЛИ выполненные задачи
+  // в списках, которые я создал (по той же логике, что "Мои списки"
+  // показывают все задачи внутри своих списков, а не только свои).
+  const archivedTasks = tasksCache.filter(t =>
+    t.status === "Готово" && (sameUsername(t.assignee, currentUser.username) || myLists.some(l => l.name === t.list))
+  );
+  const todayTasks = tasksCache.filter(t => t.today && t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) && (dashboardShowHidden || !t.hidden));
 
   const renderListCard = (list, tasksInList, showAddButton) => {
     const rows = tasksInList.map(t => renderTaskRow(t, false)).join("");
     return `
-    <div class="list-card" style="border-left-color:${list.color}">
+    <div class="list-card" style="border-left-color:${list.color}${list.hidden ? ';opacity:0.6' : ''}">
       <div class="list-card-header">
         <div>
-          <div class="list-card-title"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}</div>
+          <div class="list-card-title"><span class="list-color-dot" style="background:${list.color}"></span>${list.name}${list.hidden ? ' <span class="hint">(скрыт)</span>' : ''}</div>
           ${list.description ? `<div class="list-card-desc">${list.description}</div>` : ""}
         </div>
         ${showAddButton !== false ? `<button class="icon-btn" data-edit-list="${list.name}" title="Изменить список"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>` : ""}
@@ -2359,14 +2422,14 @@ function renderDashboardPage() {
   // (кто угодно может быть исполнителем) - это же ваш собственный список,
   // нужен полный обзор, а не только свои задачи в нём.
   const myListBlocks = myLists.map(list => {
-    const tasksInList = tasksCache.filter(t => t.list === list.name && t.status !== "Готово");
+    const tasksInList = tasksCache.filter(t => t.list === list.name && t.status !== "Готово" && (dashboardShowHidden || !t.hidden));
     return renderListCard(list, tasksInList, true);
   }).join("");
 
   // "Назначенные" - задачи из ЧУЖИХ списков, назначенные на меня.
   const assignedTasks = tasksCache.filter(t =>
     t.status !== "Готово" && sameUsername(t.assignee, currentUser.username) &&
-    otherLists.some(l => l.name === t.list)
+    otherLists.some(l => l.name === t.list) && (dashboardShowHidden || !t.hidden)
   );
   const assignedBlock = assignedTasks.length || otherLists.length ? renderListCard(
     { name: "Назначенные", color: "#6b7280", description: "Задачи из чужих списков, назначенные на вас" },
@@ -2383,6 +2446,7 @@ function renderDashboardPage() {
         <div><label>С</label><input type="date" id="reportPeriodFrom"></div>
         <div><label>По</label><input type="date" id="reportPeriodTo"></div>
       </div>
+      <div class="checkbox-row"><input type="checkbox" id="reportIncludeCalendar"><label for="reportIncludeCalendar">Включить события из календаря iCloud за этот период</label></div>
       <button class="btn btn-primary btn-small" style="margin-top:10px" id="exportReportBtn">Скачать отчёт (Word)</button>
       <div id="exportReportStatus" style="margin-top:8px;font-size:12px"></div>
     </div>
@@ -2403,7 +2467,8 @@ function renderDashboardPage() {
 
   ${assignedBlock ? `<h3 style="margin-top:24px">Назначенные</h3><div class="board-grid">${assignedBlock}</div>` : ""}
 
-  <div class="dashboard-footer-bar" style="justify-content:flex-end">
+  <div class="dashboard-footer-bar">
+    ${hiddenListsCount + hiddenTasksCount > 0 ? `<button class="btn btn-secondary btn-small" id="toggleHiddenBtn">${dashboardShowHidden ? "Скрыть скрытые" : `Показать скрытые (${hiddenListsCount + hiddenTasksCount})`}</button>` : "<div></div>"}
     <button class="btn btn-secondary btn-small" id="toggleArchiveBtn">${dashboardShowArchive ? "Скрыть архив" : `Архив (${archivedTasks.length})`}</button>
   </div>
   ${archiveSection}`;
@@ -2422,6 +2487,7 @@ function taskFormModalHtml(task) {
     <label>Статус</label>
     <select id="modalTaskStatus">${TASK_STATUSES.map(s => `<option ${s===(task.status||"Не начато")?"selected":""}>${s}</option>`).join("")}</select>
     <div class="checkbox-row"><input type="checkbox" id="modalTaskToday" ${task.today?'checked':''}><label for="modalTaskToday">Добавить в «Сегодня»</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="modalTaskHidden" ${task.hidden?'checked':''}><label for="modalTaskHidden">Скрыть задачу с дашборда</label></div>
   `;
 }
 
@@ -2429,14 +2495,35 @@ async function handleExportTasksReport() {
   const statusEl = document.getElementById("exportReportStatus");
   const from = document.getElementById("reportPeriodFrom").value;
   const to = document.getElementById("reportPeriodTo").value;
+  const includeCalendar = document.getElementById("reportIncludeCalendar").checked;
   if (!from || !to) { statusEl.textContent = "⚠️ Укажите обе даты периода."; return; }
 
   const completed = tasksCache.filter(t =>
     t.status === "Готово" && t.completedAt && t.completedAt >= from && t.completedAt <= to &&
     sameUsername(t.assignee, currentUser.username)
   );
-  if (!completed.length) {
-    statusEl.textContent = "⚠️ За выбранный период нет выполненных задач, назначенных на вас.";
+
+  let events = [];
+  if (includeCalendar) {
+    statusEl.textContent = "Получаю события из iCloud...";
+    try {
+      const res = await fetch(`${window.location.origin}/.netlify/functions/read-icloud-calendar`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dateFrom: from, dateTo: to }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        events = json.events;
+      } else {
+        statusEl.textContent = "⚠️ Не удалось получить календарь iCloud: " + (json.error || "неизвестная ошибка") + ". Отчёт будет собран без событий.";
+      }
+    } catch (err) {
+      statusEl.textContent = "⚠️ Не удалось связаться с сервером для календаря. Отчёт будет собран без событий.";
+    }
+  }
+
+  if (!completed.length && !events.length) {
+    statusEl.textContent = "⚠️ За выбранный период нет ни выполненных задач, назначенных на вас, ни событий календаря.";
     return;
   }
 
@@ -2455,6 +2542,8 @@ async function handleExportTasksReport() {
     period: `${isoToRuDate(from)} — ${isoToRuDate(to)}`,
     employee_name: displayNameFor(currentUser.username),
     lists,
+    hasEvents: events.length > 0,
+    events: events.map(e => ({ event_date: isoToRuDate(e.date), event_time: e.time, event_title: e.title })),
   };
 
   await generateDocxFromTemplate("Шаблон_Отчёт_по_задачам.docx", data, `Отчёт_${currentUser.username}_${from}_${to}`, statusEl);
@@ -2513,13 +2602,15 @@ function attachDashboardHandlers() {
         <div class="hint">У старых списков владелец не был указан — выберите здесь, чтобы список верно попадал в «Мои списки»/«Назначенные».</div>
         <label>Цвет</label>
         ${colorPickerHtml(selectedColor)}
+        <div class="checkbox-row"><input type="checkbox" id="modalListHidden" ${list.hidden?'checked':''}><label for="modalListHidden">Скрыть список с дашборда</label></div>
         <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border)">
           <button type="button" class="btn-danger-text" id="modalDeleteListBtn">Удалить список</button>
         </div>
       `, async () => {
         const description = document.getElementById("modalListDesc").value.trim();
         const createdBy = document.getElementById("modalListOwner").value;
-        await updateKnownList(list.name, { color: selectedColor, description, createdBy });
+        const hidden = document.getElementById("modalListHidden").checked;
+        await updateKnownList(list.name, { color: selectedColor, description, createdBy, hidden });
         renderApp();
         return true;
       });
@@ -2536,6 +2627,8 @@ function attachDashboardHandlers() {
 
   // (обработчик для dashboardShowAllCheck убран вместе с самим чекбоксом)
   document.getElementById("toggleArchiveBtn").onclick = () => { dashboardShowArchive = !dashboardShowArchive; renderApp(); };
+  const toggleHiddenBtn = document.getElementById("toggleHiddenBtn");
+  if (toggleHiddenBtn) toggleHiddenBtn.onclick = () => { dashboardShowHidden = !dashboardShowHidden; renderApp(); };
   const exportReportBtn = document.getElementById("exportReportBtn");
   if (exportReportBtn) exportReportBtn.onclick = handleExportTasksReport;
 
@@ -2550,8 +2643,9 @@ function attachDashboardHandlers() {
         const dueDate = document.getElementById("modalTaskDueDate").value;
         const status = document.getElementById("modalTaskStatus").value;
         const today = document.getElementById("modalTaskToday").checked;
+        const hidden = document.getElementById("modalTaskHidden").checked;
         const id = "t_" + Date.now();
-        const task = { id, list: listName, title, description, assignee, status, dueDate, today, completedAt: status === "Готово" ? todayISO() : null };
+        const task = { id, list: listName, title, description, assignee, status, dueDate, today, hidden, completedAt: status === "Готово" ? todayISO() : null };
         tasksCache.push(task);
         renderApp();
         const { id: _drop, ...taskData } = task;
@@ -2578,6 +2672,7 @@ function attachDashboardHandlers() {
         else if (newStatus !== "Готово") task.completedAt = null;
         task.status = newStatus;
         task.today = document.getElementById("modalTaskToday").checked;
+        task.hidden = document.getElementById("modalTaskHidden").checked;
         renderApp();
         const { id: _drop, ...taskData } = task;
         await fbDb.collection("tasks").doc(id).set(taskData);
