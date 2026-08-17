@@ -329,7 +329,8 @@ const GRANTS = {
 };
 
 const CONTRACT_CONFIGS = {
-  "services_200|ip": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги — ИП", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, appendixCount: 2, loopNames: ["specialists", "specialists2"], bodyFields: ["subject_description", "subject_description_short", "project_name", "total_period_start", "total_period_end"], appendixFields: ["project_solution_name", "period", "place"], appendixTotalPattern: "appendixN_total", rowFields: [{name:"specialist_type",label:"Тип специалиста"},{name:"specialist_description",label:"Описание"},{name:"specialist_schedule_note",label:"Заметка о графике"},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
+  "services_200|ip": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги — ИП", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, trueLoopAppendices: true, bodyFields: ["subject_description", "subject_description_short", "project_name", "total_period_start", "total_period_end"], appendixFields: ["project_solution_name", "period", "place", "participant_category"], rowFields: [{name:"specialist_type",label:"Тип услуги"},{name:"specialist_description",label:"Описание"},{name:"specialist_schedule_note",label:"Заметка о графике",editableLabel:true},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
+  "services_200_specialists|ip": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги — привлечение специалистов (ИП)", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, trueLoopAppendices: true, bodyFields: ["subject_description", "subject_description_short", "project_name", "total_period_start", "total_period_end"], appendixFields: ["project_solution_name", "period", "place", "participant_category"], rowFields: [{name:"specialist_type",label:"Тип услуги"},{name:"specialist_description",label:"Описание"},{name:"specialist_schedule_note",label:"Заметка о графике",editableLabel:true},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
   "services_200|ip_ads": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги (реклама) — ИП", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, appendixCount: 2, loopNames: ["specialists1", "specialists2"], bodyFields: ["subject_description", "subject_description_short", "project_name", "total_period_start", "total_period_end"], appendixFields: ["project_solution_name"], appendixTotalPattern: "appendixN_total", rowFields: [{name:"specialist_type",label:"Тип услуги"},{name:"specialist_description",label:"Описание"},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
   "services_200|samozanyaty": { calcFields: {qty:"specialist_quantity",price:"specialist_unit_price",total:"specialist_line_total"}, label: "Услуги — Самозанятый", roleLabels: { customer: "Заказчик", contractor: "Исполнитель" }, appendixCount: 1, loopNames: ["specialists"], bodyFields: ["subject_description", "project_name", "service_deadline"], appendixFields: ["project_solution_name"], appendixTotalPattern: "appendix_total", rowFields: [{name:"specialist_type",label:"Тип услуги"},{name:"specialist_description",label:"Описание"},{name:"specialist_unit",label:"Ед. изм."},{name:"specialist_quantity",label:"Кол-во"},{name:"specialist_unit_price",label:"Цена, руб."},{name:"specialist_line_total",label:"Сумма, руб."}] },
   "supply_300|ip": { calcFields: {qty:"item_quantity",price:"item_unit_price",total:"item_line_total"}, label: "Поставка — ИП", roleLabels: { customer: "Заказчик", contractor: "Поставщик" }, appendixCount: 2, loopNames: ["items1", "items2"], bodyFields: ["subject_description", "project_name", "delivery_deadline"], appendixFields: ["project_solution_name", "goods_description_short"], appendixTotalPattern: "appendixN_total", rowFields: [{name:"item_number",label:"№"},{name:"item_name",label:"Наименование"},{name:"item_tech_specs",label:"Тех. характеристики"},{name:"item_country_of_origin",label:"Страна происх.",default:"Российская Федерация"},{name:"item_quantity",label:"Кол-во"},{name:"item_unit",label:"Ед. изм."},{name:"item_unit_price",label:"Цена, руб."},{name:"item_line_total",label:"Сумма, руб."},{name:"item_delivery_address",label:"Место поставки"}] },
@@ -426,6 +427,26 @@ function buildPayload(state, config, grant) {
   } else {
     data.vat_clause = "НДС не облагается";
   }
+  if (config.trueLoopAppendices) {
+    // Новая архитектура (настоящий цикл, без предела в 2 приложения) -
+    // каждое приложение - один объект массива со своими полями "как есть"
+    // (без суффикса номера) и вложенным списком строк.
+    data.appendices = state.appendices.map((appendix, idx) => {
+      const n = idx + 1;
+      const obj = { appendix_number: String(n) };
+      for (const field of config.appendixFields) obj[field] = appendix.values[field];
+      obj.total = formatRuNumber(computeAppendixTotalRub(appendix, config));
+      const scheduleNoteLabel = state.customFieldLabels.specialist_schedule_note || "Заметка о графике";
+      obj.specialists = appendix.rows.map(row => ({
+        ...row,
+        schedule_note_label: (row.specialist_schedule_note && row.specialist_schedule_note.trim()) ? `${scheduleNoteLabel}: ` : "",
+      }));
+      return obj;
+    });
+    // Резюме (Приложение №N+1) всегда идёт СЛЕДОМ за последним приложением
+    // специалистов - его номер должен сдвигаться вместе с их количеством.
+    data.resume_appendix_number = String(state.appendices.length + 1);
+  } else {
   const appendicesForLoop = [];
   state.appendices.forEach((appendix, idx) => {
     const n = idx + 1;
@@ -458,6 +479,7 @@ function buildPayload(state, config, grant) {
     if (config.loopNames[n - 1] && data[config.loopNames[n - 1]] === undefined) {
       data[config.loopNames[n - 1]] = [];
     }
+  }
   }
   if (state.rental) {
     const dailyTotal = computeRentalDailyTotalRub(state, config);
@@ -540,7 +562,7 @@ function recalcRentalLive() {
 
 const STEP_TITLES = ["Тип и грант", "Стороны", "Тело договора", "Приложения", "Проверка"];
 let currentStep = 0;
-const state = { contractType: null, contractorVariant: null, grantId: "vkmp", contractNumber: "", contractDate: "", polozhenieClause: "пп. 4 п.1 раздела 2 главы IV", notEmployeeConfirmed: false, contractor: {}, selectedContractorId: null, bodyValues: {}, totalAmountRub: null, appendices: [], rental: null, vatMode: "none", vatRate: 20, paymentTermDays: "7", paymentTermDaysWords: "Семи" };
+const state = { contractType: null, contractorVariant: null, grantId: "vkmp", contractNumber: "", contractDate: "", polozhenieClause: "пп. 4 п.1 раздела 2 главы IV", notEmployeeConfirmed: false, contractor: {}, selectedContractorId: null, bodyValues: {}, totalAmountRub: null, appendices: [], rental: null, vatMode: "none", vatRate: 20, paymentTermDays: "7", paymentTermDaysWords: "Семи", customFieldLabels: {} };
 
 // ============================================================
 // АВТОСОХРАНЕНИЕ ЧЕРНОВИКА ДОГОВОРА
@@ -568,7 +590,7 @@ function resetDraft() {
     contractType: null, contractorVariant: null, grantId: "vkmp", contractNumber: "", contractDate: "",
     polozhenieClause: "пп. 4 п.1 раздела 2 главы IV", notEmployeeConfirmed: false, contractor: {}, selectedContractorId: null,
     bodyValues: {}, totalAmountRub: null, appendices: [], rental: null, vatMode: "none", vatRate: 20,
-    paymentTermDays: "7", paymentTermDaysWords: "Семи",
+    paymentTermDays: "7", paymentTermDaysWords: "Семи", customFieldLabels: {},
   });
   currentStep = 0;
 }
@@ -2802,6 +2824,7 @@ function renderApp() {
 function renderStep1() {
   const typeOptions = [
     { type: "services_200", variant: "ip", label: "Услуги — ИП" },
+    { type: "services_200_specialists", variant: "ip", label: "Услуги — привлечение специалистов (ИП)" },
     { type: "services_200", variant: "ip_ads", label: "Услуги (реклама) — ИП" },
     { type: "services_200", variant: "samozanyaty", label: "Услуги — Самозанятый" },
     { type: "supply_300", variant: "ip", label: "Поставка — ИП" },
@@ -2837,7 +2860,16 @@ function renderStep2() {
 
 function renderStep3() {
   const config = currentConfig();
-  const bodyHtml = config.bodyFields.map(f => `<label class="required">${BODY_FIELD_LABELS[f]||f}</label>${renderBodyFieldInput(f)}`).join("");
+  const bodyHtml = config.bodyFields.map(f => {
+    let label = BODY_FIELD_LABELS[f] || f;
+    // В шаблоне "Услуги — привлечение специалистов" фраза "услуги по" уже
+    // вшита в текст договора - пользователь вводит только окончание (напр.
+    // "привлечению специалистов"), а не всю фразу целиком.
+    if (f === "subject_description" && state.contractType === "services_200_specialists") {
+      label = 'Описание услуги — окончание фразы "услуги по ..." (для п.1.1 и техзадания)';
+    }
+    return `<label class="required">${label}</label>${renderBodyFieldInput(f)}`;
+  }).join("");
   const vatOptions = [
     ["none", "Без НДС (НДС не облагается)"],
     ["included", "НДС включён в сумму договора"],
@@ -2862,7 +2894,7 @@ function renderStep4() {
   ensureAppendices();
   const config = currentConfig();
   const isRental = state.contractType === "rental_400";
-  const canAddMore = state.appendices.length < config.appendixCount;
+  const canAddMore = config.trueLoopAppendices || state.appendices.length < config.appendixCount;
   const canRemove = state.appendices.length > 1;
   const appendixBlocks = state.appendices.map((appendix, aIdx) => {
     const fieldsHtml = config.appendixFields.map(f => `<label class="required">${APPENDIX_FIELD_LABELS[f]||f}</label><input type="text" required data-appendix-idx="${aIdx}" data-appendix-field="${f}" value="${appendix.values[f]||''}">`).join("");
@@ -2877,7 +2909,10 @@ function renderStep4() {
     const totalLabel = isRental ? "" : `<label>Итог приложения, руб. <small class="gray">(считается автоматически)</small></label><div id="appendixTotalDisplay-${aIdx}" style="font-weight:600;font-size:15px;padding:6px 0">${formatRuNumber(computeAppendixTotalRub(appendix, config))} руб.</div>`;
     const removeBtn = canRemove ? `<button class="btn-danger-text" data-remove-appendix="${aIdx}" style="float:right">✕ Удалить приложение</button>` : "";
     const smetaPickerBtn = smetaItemsAvailable() ? `<button class="btn btn-secondary btn-small" style="margin-left:8px" data-pick-from-smeta="${aIdx}">Добавить из сметы</button>` : "";
-    return `<div class="appendix-block"><h4>Приложение ${aIdx+1}${removeBtn}</h4>${fieldsHtml}<table class="row-table"><thead><tr>${config.rowFields.map(f=>`<th>${f.label}</th>`).join("")}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table><button class="btn btn-secondary" style="margin-top:8px;font-size:12px;padding:6px 12px" data-add-row="${aIdx}">+ Добавить строку</button>${smetaPickerBtn}${totalLabel}</div>`;
+    return `<div class="appendix-block"><h4>Приложение ${aIdx+1}${removeBtn}</h4>${fieldsHtml}<table class="row-table"><thead><tr>${config.rowFields.map(f => f.editableLabel
+      ? `<th><input type="text" data-field-label="${f.name}" value="${(state.customFieldLabels[f.name]||f.label).replace(/"/g,'&quot;')}" style="font-weight:600;padding:2px 4px;border:1px solid var(--border-strong)"></th>`
+      : `<th>${f.label}</th>`
+    ).join("")}<th></th></tr></thead><tbody>${rowsHtml}</tbody></table><button class="btn btn-secondary" style="margin-top:8px;font-size:12px;padding:6px 12px" data-add-row="${aIdx}">+ Добавить строку</button>${smetaPickerBtn}${totalLabel}</div>`;
   }).join("");
 
   const addAppendixBtn = canAddMore ? `<button class="btn btn-secondary" style="margin-bottom:16px" id="addAppendixBtn">+ Добавить приложение</button>` : "";
@@ -2890,7 +2925,8 @@ function renderStep4() {
       <div><label>ИТОГО за весь срок <small class="gray">(авто)</small></label><div id="rentalTotalDisplay" style="font-weight:600;padding:6px 0">${formatRuNumber(computeContractTotalRub(state, config))} руб.</div></div>
     </div></div>` : "";
 
-  return `<div class="card"><h2>Шаг 4 — Приложения (${state.appendices.length} из ${config.appendixCount})</h2><div class="hint">Сумма строки = количество × цена, считается автоматически. Просто впишите количество и цену.</div>${appendixBlocks}${addAppendixBtn}</div>${rentalBlock}
+  const appendixCountLabel = config.trueLoopAppendices ? `${state.appendices.length} (без ограничения)` : `${state.appendices.length} из ${config.appendixCount}`;
+  return `<div class="card"><h2>Шаг 4 — Приложения (${appendixCountLabel})</h2><div class="hint">Сумма строки = количество × цена, считается автоматически. Просто впишите количество и цену.</div>${appendixBlocks}${addAppendixBtn}</div>${rentalBlock}
   <div class="nav-buttons"><button class="btn btn-secondary" id="backBtn">← Назад</button><button class="btn btn-primary" id="nextBtn">Далее →</button></div>`;
 }
 
@@ -2986,6 +3022,7 @@ function attachHandlers() {
       };
     });
     document.querySelectorAll("[data-calc-row]").forEach(inp => { inp.oninput = () => recalcRowLive(parseInt(inp.dataset.calcRow)); });
+    document.querySelectorAll("[data-field-label]").forEach(inp => { inp.onchange = () => { state.customFieldLabels[inp.dataset.fieldLabel] = inp.value; }; });
     const rentalDaysEl = document.getElementById("rentalDays");
     if (rentalDaysEl) rentalDaysEl.oninput = recalcRentalLive;
     document.querySelectorAll("[data-pick-from-smeta]").forEach(btn => {
