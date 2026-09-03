@@ -9,9 +9,12 @@
 // у этой функции нет "клиента" под рукой - её запускает сам Netlify по
 // таймеру, поэтому ей нужен СВОЙ прямой доступ к Firestore. Для этого
 // требуется:
-//   1. Переменная окружения FIREBASE_SERVICE_ACCOUNT_JSON - весь JSON
-//      сервисного аккаунта Firebase одной строкой (Firebase Console →
-//      Project settings → Service accounts → Generate new private key).
+//   1. Файл secrets/firebase-service-account.json (см. netlify.toml -
+//      подключён через included_files именно к этой функции). Хранится
+//      файлом, а не переменной окружения - иначе AWS Lambda упирается в
+//      лимит 4 КБ на все переменные окружения разом (длины одного только
+//      приватного ключа обычно уже достаточно, чтобы этот лимит превысить).
+//      Безопасно ТОЛЬКО в приватном репозитории.
 //   2. VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY (уже настроены для send-push.js).
 //
 // Логика: находит события, у которых наступило время напоминания
@@ -19,14 +22,26 @@
 // (reminderNotified не true) - отправляет push каждому, кому событие видно
 // (создатель + участники "общего" события), и помечает reminderNotified.
 
+const fs = require("fs");
+const path = require("path");
 const webpush = require("web-push");
 const admin = require("firebase-admin");
 
+const KEY_FILE_PATH = path.join(__dirname, "..", "secrets", "firebase-service-account.json");
+
 function initAdmin() {
   if (admin.apps.length) return admin.app();
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error("Не настроена переменная окружения FIREBASE_SERVICE_ACCOUNT_JSON.");
-  const serviceAccount = JSON.parse(raw);
+  let serviceAccount;
+  try {
+    const raw = fs.readFileSync(KEY_FILE_PATH, "utf-8");
+    serviceAccount = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(
+      `Не удалось прочитать ключ сервисного аккаунта Firebase из файла ${KEY_FILE_PATH}. ` +
+      "Убедитесь, что файл secrets/firebase-service-account.json существует в репозитории " +
+      "и включён в included_files функции check-reminders в netlify.toml. Исходная ошибка: " + e.message
+    );
+  }
   return admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 }
 
