@@ -1,0 +1,5 @@
+[functions]
+  included_files = ["templates/**", "secrets/**"]
+
+[functions."check-reminders"]
+  schedule = "*/5 * * * *"
