@@ -1,6 +1,0 @@
-[functions]
-  included_files = ["templates/**"]
-
-[functions."check-reminders"]
-  schedule = "*/5 * * * *"
-
