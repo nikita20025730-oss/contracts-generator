@@ -196,13 +196,14 @@
   .cal-today-label { color: var(--accent); }
   .cal-today-label span { color: var(--accent); }
   .cal-selected-label { background: var(--nav-active-bg); }
-  .cal-hourly-wrap { max-height: 420px; overflow-y: auto; }
+  .cal-hourly-wrap { max-height: 300px; overflow-y: auto; }
   .cal-hourly-grid { display: flex; }
   .cal-hour-labels { width: 40px; flex-shrink: 0; }
   .cal-hour-label { font-size: 10px; color: var(--text-secondary); text-align: right; padding-right: 6px; box-sizing: border-box; transform: translateY(-6px); }
   .cal-day-columns { flex: 1; display: grid; grid-template-columns: repeat(var(--cal-day-cols, 1), 1fr); gap: 2px; }
   .cal-day-column { position: relative; }
-  .cal-day-column-today { background: var(--nav-active-bg); border-radius: 6px; }
+  .cal-day-column-today { border-radius: 6px; box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .cal-day-column-today .cal-day-column-body { background: rgba(220, 38, 38, 0.06); }
   .cal-allday-chips { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; min-height: 4px; }
   .cal-allday-chip { font-size: 9px; font-weight: 700; color: #fff; padding: 2px 5px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
   .cal-day-column-body { position: relative; border-left: 1px solid var(--border); }
@@ -3288,17 +3289,20 @@ async function toggleNotifPanel() {
   if (!notificationsHistoryLoaded) await loadNotificationsHistory();
   panel.innerHTML = renderNotifPanel();
 
-  // Позиционируем панель через ФАКТИЧЕСКИЕ координаты кнопки на экране
-  // (position: fixed), а не через position: absolute внутри узкого сайдбара -
-  // иначе панель (300px) шире самого сайдбара (232px) и обрезается его
-  // собственной прокруткой, как и было раньше.
-  const rect = bellBtn.getBoundingClientRect();
-  const panelWidth = 300;
-  let left = rect.left;
-  if (left + panelWidth > window.innerWidth - 10) left = window.innerWidth - panelWidth - 10;
-  if (left < 10) left = 10;
-  panel.style.left = `${left}px`;
-  panel.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+  // Позиционируем панель ФИКСИРОВАННО у нижнего левого угла, а не через
+  // измерение координат кнопки-колокольчика в моменте клика - тот способ
+  // оказался ненадёжным (панель иногда открывалась в неожиданном месте
+  // экрана, судя по всему из-за того, что колокольчик лежит внутри
+  // мобильного сайдбара с собственной анимацией выезда, и его реальные
+  // координаты в момент клика не всегда совпадают с ожидаемыми). Кнопка
+  // всегда находится в подвале сайдбара внизу слева - фиксированные отступы
+  // от этого угла работают предсказуемо в любой ситуации.
+  const panelWidth = Math.min(300, window.innerWidth - 20);
+  panel.style.left = "10px";
+  panel.style.right = "";
+  panel.style.width = `${panelWidth}px`;
+  panel.style.bottom = "72px";
+  panel.style.maxHeight = `${Math.max(200, window.innerHeight - 160)}px`;
 
   panel.style.display = "block";
   wireNotifPanel();
